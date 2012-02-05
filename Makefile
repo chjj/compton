@@ -4,7 +4,7 @@ INCS = `pkg-config --cflags $(PACKAGES)`
 CFLAGS = -Wall
 PREFIX = /usr/local
 MANDIR = $(PREFIX)/share/man/man1
-OBJS = compton.o fades.o
+OBJS = compton.o fades.o shadows.o
 
 .c.o:
 	$(CC) $(CFLAGS) $(INCS) -c $*.c

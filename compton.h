@@ -108,10 +108,19 @@ typedef struct _fade {
   Display *dpy;
 } fade;
 
+extern int shadow_radius;
+extern int shadow_offset_x;
+extern int shadow_offset_y;
+extern double shadow_opacity;
+extern Bool clear_shadow;
+
 extern double fade_in_step;
 extern double fade_out_step;
 extern int fade_delta;
 extern int fade_time;
+
+extern Window root;
+extern conv *gaussian_map;
 
 int
 get_time_in_milliseconds();
@@ -140,24 +149,24 @@ fade_timeout(void);
 void
 run_fades(Display *dpy);
 
-static double
+double
 gaussian(double r, double x, double y);
 
-static conv *
+conv *
 make_gaussian_map(Display *dpy, double r);
 
-static unsigned char
+unsigned char
 sum_gaussian(conv *map, double opacity,
              int x, int y, int width, int height);
 
-static void
+void
 presum_gaussian(conv *map);
 
-static XImage *
+XImage *
 make_shadow(Display *dpy, double opacity,
             int width, int height);
 
-static Picture
+Picture
 shadow_picture(Display *dpy, double opacity, Picture alpha_pict,
                int width, int height, int *wp, int *hp);
 
