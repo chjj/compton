@@ -24,6 +24,7 @@
 #define DEBUG_EVENTS 0
 #define MONITOR_REPAINT 0
 
+#define OPAQUE 0xffffffff
 
 typedef enum {
   WINTYPE_UNKNOWN,
@@ -107,6 +108,10 @@ typedef struct _fade {
   Display *dpy;
 } fade;
 
+extern double fade_in_step;
+extern double fade_out_step;
+extern int fade_delta;
+extern int fade_time;
 
 int
 get_time_in_milliseconds();
@@ -123,7 +128,7 @@ cleanup_fade(Display *dpy, win *w);
 void
 enqueue_fade(Display *dpy, fade *f);
 
-static void
+void
 set_fade(Display *dpy, win *w, double start,
          double finish, double step,
          void(*callback) (Display *dpy, win *w),
@@ -181,7 +186,7 @@ root_tile_f(Display *dpy);
 static void
 paint_root(Display *dpy);
 
-static XserverRegion
+XserverRegion
 win_extents(Display *dpy, win *w);
 
 static XserverRegion
@@ -239,7 +244,7 @@ get_opacity_prop(Display *dpy, win *w, unsigned int def);
 static double
 get_opacity_percent(Display *dpy, win *w);
 
-static void
+void
 determine_mode(Display *dpy, win *w);
 
 static void
