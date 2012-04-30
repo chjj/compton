@@ -68,6 +68,10 @@ double win_type_opacity[NUM_WINTYPES];
 Bool win_type_shadow[NUM_WINTYPES];
 Bool win_type_fade[NUM_WINTYPES];
 
+/* blacklist info */
+int blacklist_count;
+long *win_blacklist;
+
 /**
  * Macros
  */
@@ -103,6 +107,18 @@ double inactive_opacity = 0;
 double frame_opacity = 0;
 
 Bool synchronize = False;
+
+
+/**
+ * DJB2 Hash Funtion
+ */
+unsigned long hash(unsigned char *str) {
+	unsigned long hash = 5381;
+	int c;
+	while ((c = *str++))
+		hash = ((hash << 5) + hash) + c;
+	return hash;
+}
 
 /**
  * Fades
@@ -295,6 +311,20 @@ run_fades(Display *dpy) {
 /**
  * Shadows
  */
+
+static inline Bool
+is_shadow_blacklisted(win *w) {
+	if (!w->has_name)
+		return False;
+	else {
+		int i;
+		for (i = 0;i < blacklist_count;i++) {
+			//printf("testing for bl: %li == %li\n",w->name_hash,win_blacklist[i]);
+			if (w->name_hash == win_blacklist[i]) return True;
+		}
+		return False;
+	}
+}
 
 static double
 gaussian(double r, double x, double y) {
@@ -791,7 +821,7 @@ win_extents(Display *dpy, win *w) {
   r.width = w->a.width + w->a.border_width * 2;
   r.height = w->a.height + w->a.border_width * 2;
 
-  if (win_type_shadow[w->window_type]) {
+  if (win_type_shadow[w->window_type] && !is_shadow_blacklisted(w)) {
     XRectangle sr;
 
     w->shadow_dx = shadow_offset_x;
@@ -1101,7 +1131,7 @@ paint_all(Display *dpy, XserverRegion region) {
     XFixesSetPictureClipRegion(dpy,
       root_buffer, 0, 0, w->border_clip);
 
-    if (win_type_shadow[w->window_type]) {
+    if (win_type_shadow[w->window_type] && !is_shadow_blacklisted(w)) {
       XRenderComposite(
         dpy, PictOpOver, black_picture, w->shadow,
         root_buffer, 0, 0, 0, 0,
@@ -1646,6 +1676,30 @@ add_win(Display *dpy, Window id, Window prev, Bool override_redirect) {
       XSelectInput(dpy, cw, PropertyChangeMask);
     }
   }
+
+#ifdef NO_I18N
+	{
+		unsigned char *name;
+		if (!XFetchName(dpy, new->client_win?new->client_win:new->id, &name))
+			new->has_name = 0;
+		else {
+			new ->has_name = 1;
+			new->name_hash = hash(name);
+			XFree(name);
+		}
+	}
+#else
+	{
+		XTextProperty tp;
+		if (!XGetWMName(dpy, new->client_win?new->client_win:new->id, &tp))
+			new->has_name = 0;
+		else {
+			new->has_name = 1;
+			new->name_hash = hash(tp.value);
+			XFree(tp.value);
+		}
+	}
+#endif
 
   new->next = *p;
   *p = new;
@@ -2256,6 +2310,9 @@ usage() {
     "  Opacity of window titlebars and borders. (0.1 - 1.0)\n"
     "-G\n"
     "  Don't draw shadows on DND windows\n"
+		"-B shadow-blacklist\n"
+		"  Comma separated list of window names for which shadows should not be draw.\n"
+		"  e.g. compton -c -B oclock,xeyes => draw shadows, but not for oclock or xeyes.\n"
     "-b daemonize\n"
     "  Daemonize process.\n"
     "-S\n"
@@ -2374,14 +2431,39 @@ main(int argc, char **argv) {
   Bool no_dnd_shadow  = False;
   Bool fork_after_register = False;
 
+	blacklist_count = 0;
+
   for (i = 0; i < NUM_WINTYPES; ++i) {
     win_type_fade[i] = False;
     win_type_shadow[i] = False;
     win_type_opacity[i] = 1.0;
   }
 
-  while ((o = getopt(argc, argv, "D:I:O:d:r:o:m:l:t:i:e:scnfFCaSzGb")) != -1) {
+  while ((o = getopt(argc, argv, "B:D:I:O:d:r:o:m:l:t:i:e:scnfFCaSzGb")) != -1) {
     switch (o) {
+  		case 'B': {
+				unsigned char *lead = (unsigned char*)optarg, *follow;
+				blacklist_count = 1;
+				while(*lead) {
+					if (*lead == ',') blacklist_count++;
+					lead++;
+				}
+				win_blacklist = malloc(sizeof(long)*blacklist_count);
+				if (blacklist_count == 1)
+					win_blacklist[0] = hash((unsigned char*)optarg);
+				else {
+					int i = 0;
+					lead = follow = (unsigned char*)optarg;
+					while(i < blacklist_count) {
+						while (*lead && *lead != ',') lead++;
+						*lead = '\0';
+						win_blacklist[i++] = hash(follow);
+						lead++;
+						follow = lead;
+					}
+				}
+				break;
+			}
       case 'd':
         display = optarg;
         break;
