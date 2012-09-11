@@ -70,6 +70,8 @@ typedef struct _win {
   struct _win *next;
   Window id;
   Window client_win;
+	int has_name;
+	unsigned long name_hash;
 #if HAS_NAME_WINDOW_PIXMAP
   Pixmap pixmap;
 #endif
