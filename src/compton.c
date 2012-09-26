@@ -3224,8 +3224,8 @@ parse_config(char *name) {
 
         int n = v->u.object.length;
         while (n--) {
-          json_char *kk = val->u.object.values[n].name;
-          json_value *vv = val->u.object.values[n].value;
+          json_char *kk = v->u.object.values[n].name;
+          json_value *vv = v->u.object.values[n].value;
           // TODO: add win_type_* to options struct?
           if (strcmp(kk, "fade") == 0) {
             if (vv->type != json_boolean) continue;
