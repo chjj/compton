@@ -39,6 +39,7 @@
 #include <math.h>
 #include <sys/poll.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -55,6 +56,8 @@
 #include <libgen.h>
 #include <libconfig.h>
 #endif
+
+#include "json.h"
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>

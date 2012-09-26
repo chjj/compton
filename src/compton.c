@@ -2961,7 +2961,6 @@ fork_after(void) {
   freopen("/dev/null", "w", stderr);
 }
 
-#ifdef CONFIG_LIBCONFIG
 /**
  * Get a file stream of the configuration file to read.
  *
@@ -3047,11 +3046,12 @@ open_config_file(char *cpath, char **ppath) {
   return NULL;
 }
 
+#ifdef CONFIG_LIBCONFIG
 /**
  * Parse a configuration file from default location.
  */
 static void
-parse_config(char *cpath) {
+parse_config_(char *cpath) {
   char *path = NULL, *parent = NULL;
   FILE *f;
   config_t cfg;
@@ -3184,6 +3184,182 @@ parse_config(char *cpath) {
 }
 #endif
 
+static void
+parse_config(char *name) {
+  char *path = NULL;
+  FILE *f = open_config_file(name, &path);
+  if (!f) return;
+
+  char *conf = read_config(path, f);
+  free(path);
+  if (conf == NULL) return;
+
+  json_value *root = json_parse(conf);
+
+  if (root->type != json_object) {
+    fprintf(stderr, "Root node must be a JSON object.\n");
+    exit(1);
+  }
+
+  int i = root->u.object.length;
+  json_char *key;
+  json_value *val;
+
+  while (i--) {
+    key = root->u.object.values[i].name;
+    val = root->u.object.values[i].value;
+
+    // -D (fade_delta)
+    if (strcmp(key, "fade-delta") == 0) {
+      if (val->type != json_integer) continue;
+      options.fade_delta = val->u.integer;
+    // -I (fade_in_step)
+    } else if (strcmp(key, "fade-in-step") == 0) {
+      if (val->type != json_double) continue;
+      options.fade_in_step = normalize_d(val->u.dbl) * OPAQUE;
+    // -O (fade_out_step)
+    } else if (strcmp(key, "fade-out-step") == 0) {
+      if (val->type != json_double) continue;
+      options.fade_out_step = normalize_d(val->u.dbl) * OPAQUE;
+    // -r (shadow_radius)
+    } else if (strcmp(key, "shadow-radius") == 0) {
+      if (val->type != json_integer) continue;
+      options.shadow_radius = val->u.integer;
+    // -o (shadow_opacity)
+    } else if (strcmp(key, "shadow-opacity") == 0) {
+      if (val->type != json_double) continue;
+      options.shadow_opacity = val->u.dbl;
+    // -l (shadow_offset_x)
+    } else if (strcmp(key, "shadow-offset-x") == 0) {
+      if (val->type != json_integer) continue;
+      options.shadow_offset_x = val->u.integer;
+    // -t (shadow_offset_y)
+    } else if (strcmp(key, "shadow-offset-y") == 0) {
+      if (val->type != json_integer) continue;
+      options.shadow_offset_y = val->u.integer;
+    // -i (inactive_opacity)
+    } else if (strcmp(key, "inactive-opacity") == 0) {
+      if (val->type != json_double) continue;
+      options.inactive_opacity = normalize_d(val->u.dbl) * OPAQUE;
+    // -e (frame_opacity)
+    } else if (strcmp(key, "frame-opacity") == 0) {
+      if (val->type != json_double) continue;
+      options.frame_opacity = val->u.dbl;
+    // -z (clear_shadow)
+    } else if (strcmp(key, "clear-shadow") == 0) {
+      if (val->type != json_boolean) continue;
+      options.clear_shadow = val->u.boolean;
+    // -c (shadow_enable)
+    } else if (strcmp(key, "shadow") == 0) {
+      if (val->type != json_boolean) continue;
+      if (val->u.boolean) {
+        options.shadow_enable = 2;
+        wintype_arr_enable(win_type_shadow);
+      }
+    // -C (no_dock_shadow)
+    } else if (strcmp(key, "no-dock-shadow") == 0) {
+      if (val->type != json_boolean) continue;
+      options.no_dock_shadow = val->u.boolean;
+    // -G (no_dnd_shadow)
+    } else if (strcmp(key, "no-dnd-shadow") == 0) {
+      if (val->type != json_boolean) continue;
+      options.no_dnd_shadow = val->u.boolean;
+    // -m (menu_opacity)
+    } else if (strcmp(key, "menu-opacity") == 0) {
+      if (val->type != json_double) continue;
+      options.menu_opacity = val->u.dbl;
+    // -f (fading_enable)
+    } else if (strcmp(key, "fading") == 0) {
+      if (val->type != json_boolean) continue;
+      if (val->u.boolean) {
+        options.fading_enable = 2;
+        wintype_arr_enable(win_type_fade);
+      }
+    // --shadow-red
+    } else if (strcmp(key, "shadow-red") == 0) {
+      if (val->type != json_double) continue;
+      options.shadow_red = val->u.dbl;
+    // --shadow-green
+    } else if (strcmp(key, "shadow-green") == 0) {
+      if (val->type != json_double) continue;
+      options.shadow_green = val->u.dbl;
+    // --shadow-blue
+    } else if (strcmp(key, "shadow-blue") == 0) {
+      if (val->type != json_double) continue;
+      options.shadow_blue = val->u.dbl;
+    // --inactive-opacity-override
+    } else if (strcmp(key, "inactive-opacity-override") == 0) {
+      if (val->type != json_boolean) continue;
+      options.inactive_opacity_override = val->u.boolean;
+    // --inactive-dim
+    } else if (strcmp(key, "inactive-dim") == 0) {
+      if (val->type != json_double) continue;
+      options.inactive_dim = val->u.dbl;
+    // --mark-wmwin-focused
+    } else if (strcmp(key, "mark-wmwin-focused") == 0) {
+      if (val->type != json_boolean) continue;
+      options.mark_wmwin_focused = val->u.boolean;
+    // --shadow-exclude
+    } else if (strcmp(key, "shadow-exclude") == 0) {
+      // Can be array or string
+      if (val->type == json_array) {
+        int j = val->u.array.length;
+        while (j--) {
+          json_value *vv = val->u.array.values[j];
+          condlst_add(&options.shadow_blacklist, vv->u.string.ptr);
+        }
+      } else if (val->type == json_string) {
+        condlst_add(&options.shadow_blacklist, val->u.string.ptr);
+      }
+    } else if (strcmp(key, "wintypes") == 0) {
+      if (val->type != json_object) continue;
+      // "wintypes": {
+      //   "tooltip": {
+      //     "fade": true,
+      //     "shadow": false,
+      //     "opacity": 0.75
+      //   }
+      // }
+      int j = val->u.object.length;
+      while (j--) {
+        json_char *k = val->u.object.values[j].name;
+        json_value *v = val->u.object.values[j].value;
+
+        bool found = false;
+        wintype w = 0;
+        for (; w < NUM_WINTYPES; w++) {
+          if (strcmp(k, WINTYPES[w]) == 0) {
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) continue;
+        if (v->type != json_object) continue;
+
+        int n = v->u.object.length;
+        while (n--) {
+          json_char *kk = val->u.object.values[n].name;
+          json_value *vv = val->u.object.values[n].value;
+          // TODO: add win_type_* to options struct?
+          if (strcmp(kk, "fade") == 0) {
+            if (vv->type != json_boolean) continue;
+            win_type_fade[w] = vv->u.boolean;
+          } else if (strcmp(kk, "shadow") == 0) {
+            if (vv->type != json_boolean) continue;
+            win_type_shadow[w] = vv->u.boolean;
+          } else if (strcmp(kk, "opacity") == 0) {
+            if (vv->type != json_double) continue;
+            win_type_opacity[w] = vv->u.dbl;
+          }
+        }
+      }
+    }
+  }
+
+  // json_value_free(root);
+}
+
 /**
  * Process arguments and configuration files.
  */
@@ -3222,9 +3398,7 @@ get_cfg(int argc, char *const *argv) {
       usage();
   }
 
-#ifdef CONFIG_LIBCONFIG
   parse_config(config_file);
-#endif
 
   // Parse commandline arguments. Range checking will be done later.
   optind = 1;

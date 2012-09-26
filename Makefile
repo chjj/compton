@@ -10,7 +10,7 @@ LIBS += $(shell pcre-config --libs)
 INCS = $(shell pkg-config --cflags $(PACKAGES))
 INCS += $(shell pcre-config --cflags)
 CFLAGS += -Wall -std=c99
-OBJS = compton.o
+OBJS = json.o compton.o
 
 %.o: src/%.c src/%.h
 	$(CC) $(CFLAGS) $(INCS) -c src/$*.c
