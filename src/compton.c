@@ -3046,143 +3046,26 @@ open_config_file(char *cpath, char **ppath) {
   return NULL;
 }
 
-#ifdef CONFIG_LIBCONFIG
-/**
- * Parse a configuration file from default location.
- */
-static void
-parse_config_(char *cpath) {
-  char *path = NULL, *parent = NULL;
-  FILE *f;
-  config_t cfg;
-  int ival = 0;
-  double dval = 0.0;
-
-  f = open_config_file(cpath, &path);
+static char *
+read_config(char *name, FILE *f) {
   if (!f) {
-    if (cpath)
-      printf("Failed to read the specified configuration file.\n");
-    return;
+    if (name) f = fopen(name, "r");
+    if (!f) goto error;
   }
 
-  config_init(&cfg);
-  parent = dirname(path);
-  if (parent)
-    config_set_include_dir(&cfg, parent);
+  struct stat s;
+  if (stat(name, &s) == -1) goto error;
 
-  if (CONFIG_FALSE == config_read(&cfg, f)) {
-    printf("Error when reading configuration file \"%s\", line %d: %s\n",
-        path, config_error_line(&cfg), config_error_text(&cfg));
-    config_destroy(&cfg);
-    free(path);
-    return;
-  }
-  config_set_auto_convert(&cfg, 1);
+  char *buf = malloc(s.st_size);
+  fread(buf, 1, s.st_size, f);
+  fclose(f);
 
-  free(path);
+  return buf;
 
-  // Get options from the configuration file. We don't do range checking
-  // right now. It will be done later
-
-  // -D (options.fade_delta)
-  if (config_lookup_int(&cfg, "fade-delta", &ival))
-    options.fade_delta = ival;
-  // -I (options.fade_in_step)
-  if (config_lookup_float(&cfg, "fade-in-step", &dval))
-    options.fade_in_step = normalize_d(dval) * OPAQUE;
-  // -O (options.fade_out_step)
-  if (config_lookup_float(&cfg, "fade-out-step", &dval))
-    options.fade_out_step = normalize_d(dval) * OPAQUE;
-  // -r (options.shadow_radius)
-  config_lookup_int(&cfg, "shadow-radius", &options.shadow_radius);
-  // -o (options.shadow_opacity)
-  config_lookup_float(&cfg, "shadow-opacity", &options.shadow_opacity);
-  // -l (options.shadow_offset_x)
-  config_lookup_int(&cfg, "shadow-offset-x", &options.shadow_offset_x);
-  // -t (options.shadow_offset_y)
-  config_lookup_int(&cfg, "shadow-offset-y", &options.shadow_offset_y);
-  // -i (options.inactive_opacity)
-  if (config_lookup_float(&cfg, "inactive-opacity", &dval))
-    options.inactive_opacity = normalize_d(dval) * OPAQUE;
-  // -e (options.frame_opacity)
-  config_lookup_float(&cfg, "frame-opacity", &options.frame_opacity);
-  // -z (options.clear_shadow)
-  if (config_lookup_bool(&cfg, "clear-shadow", &ival))
-    options.clear_shadow = ival;
-  // -c (options.shadow_enable)
-  if (config_lookup_bool(&cfg, "shadow", &ival) && ival) {
-    options.shadow_enable = 2;
-    wintype_arr_enable(win_type_shadow);
-  }
-  // -C (options.no_dock_shadow)
-  if (config_lookup_bool(&cfg, "no-dock-shadow", &ival))
-    options.no_dock_shadow = ival;
-  // -G (options.no_dnd_shadow)
-  if (config_lookup_bool(&cfg, "no-dnd-shadow", &ival))
-    options.no_dnd_shadow = ival;
-  // -m (options.menu_opacity)
-  config_lookup_float(&cfg, "menu-opacity", &options.menu_opacity);
-  // -f (options.fading_enable)
-  if (config_lookup_bool(&cfg, "fading", &ival) && ival) {
-    options.fading_enable = 2;
-    wintype_arr_enable(win_type_fade);
-  }
-  // --shadow-red
-  config_lookup_float(&cfg, "shadow-red", &options.shadow_red);
-  // --shadow-green
-  config_lookup_float(&cfg, "shadow-green", &options.shadow_green);
-  // --shadow-blue
-  config_lookup_float(&cfg, "shadow-blue", &options.shadow_blue);
-  // --inactive-opacity-override
-  if (config_lookup_bool(&cfg, "inactive-opacity-override", &ival))
-    options.inactive_opacity_override = ival;
-  // --inactive-dim
-  config_lookup_float(&cfg, "inactive-dim", &options.inactive_dim);
-  // --mark-wmwin-focused
-  if (config_lookup_bool(&cfg, "mark-wmwin-focused", &ival))
-    options.mark_wmwin_focused = ival;
-  // --shadow-exclude
-  {
-    config_setting_t *setting =
-      config_lookup(&cfg, "shadow-exclude");
-    if (setting) {
-      // Parse an array of shadow-exclude
-      if (config_setting_is_array(setting)) {
-        int i = config_setting_length(setting);
-        while (i--) {
-          condlst_add(&options.shadow_blacklist,
-              config_setting_get_string_elem(setting, i));
-        }
-      }
-      // Treat it as a single pattern if it's a string
-      else if (CONFIG_TYPE_STRING == config_setting_type(setting)) {
-        condlst_add(&options.shadow_blacklist,
-            config_setting_get_string(setting));
-      }
-    }
-  }
-  // Wintype settings
-  {
-    wintype i;
-
-    for (i = 0; i < NUM_WINTYPES; ++i) {
-      char *str = mstrjoin("wintypes.", WINTYPES[i]);
-      config_setting_t *setting = config_lookup(&cfg, str);
-      free(str);
-      if (setting) {
-        if (config_setting_lookup_bool(setting, "shadow", &ival))
-          win_type_shadow[i] = (Bool) ival;
-        if (config_setting_lookup_bool(setting, "fade", &ival))
-          win_type_fade[i] = (Bool) ival;
-        config_setting_lookup_float(setting, "opacity",
-            &win_type_opacity[i]);
-      }
-    }
-  }
-
-  config_destroy(&cfg);
+error:
+  fprintf(stderr, "Could not open config: '%s'.\n", name);
+  return NULL;
 }
-#endif
 
 static void
 parse_config(char *name) {
@@ -3250,7 +3133,7 @@ parse_config(char *name) {
       if (val->type != json_boolean) continue;
       options.clear_shadow = val->u.boolean;
     // -c (shadow_enable)
-    } else if (strcmp(key, "shadow") == 0) {
+    } else if (strcmp(key, "shadow") == 0 || strcmp(key, "shadows") == 0) {
       if (val->type != json_boolean) continue;
       if (val->u.boolean) {
         options.shadow_enable = 2;
@@ -3269,7 +3152,7 @@ parse_config(char *name) {
       if (val->type != json_double) continue;
       options.menu_opacity = val->u.dbl;
     // -f (fading_enable)
-    } else if (strcmp(key, "fading") == 0) {
+    } else if (strcmp(key, "fading") == 0 || strcmp(key, "fades") == 0) {
       if (val->type != json_boolean) continue;
       if (val->u.boolean) {
         options.fading_enable = 2;

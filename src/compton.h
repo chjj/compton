@@ -24,8 +24,6 @@
 // Whether to enable JIT support of libpcre. This may cause problems on PaX
 // kernels.
 #define CONFIG_REGEX_PCRE_JIT 1
-// Whether to enable parsing of configuration files using libconfig
-#define CONFIG_LIBCONFIG 1
 
 // === Includes ===
 
@@ -50,11 +48,6 @@
 
 #ifdef CONFIG_REGEX_PCRE
 #include <pcre.h>
-#endif
-
-#ifdef CONFIG_LIBCONFIG
-#include <libgen.h>
-#include <libconfig.h>
 #endif
 
 #include "json.h"
@@ -920,13 +913,14 @@ ev_handle(XEvent *ev);
 static void
 fork_after(void);
 
-#ifdef CONFIG_LIBCONFIG
 static FILE *
 open_config_file(char *cpath, char **path);
 
 static void
-parse_config(char *cpath);
-#endif
+parse_config(char *name);
+
+static char *
+read_config(char *name, FILE *f);
 
 static void
 get_cfg(int argc, char *const *argv);
