@@ -51,7 +51,6 @@ __R__ for runtime
 * bash (R)
 * xprop,xwininfo / x11-utils (R)
 * libpcre (B,R) (Will probably be made optional soon)
-* libconfig (B,R) (Will probably be made optional soon)
 
 To build, make sure you have the above dependencies:
 

@@ -3078,6 +3078,8 @@ parse_config(char *name) {
   if (conf == NULL) return;
 
   json_value *root = json_parse(conf);
+  free(conf);
+  if (root == NULL) return;
 
   if (root->type != json_object) {
     fprintf(stderr, "Root node must be a JSON object.\n");
@@ -3239,8 +3241,6 @@ parse_config(char *name) {
       }
     }
   }
-
-  // json_value_free(root);
 }
 
 /**
