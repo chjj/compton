@@ -3046,7 +3046,7 @@ register_cm(int scr) {
     0, 0, 1, 1, 0, None, None);
 
   Xutf8SetWMProperties(
-    dpy, w, "xcompmgr", "xcompmgr",
+    dpy, w, "compton", "compton",
     NULL, 0, NULL, NULL, NULL);
 
   len = strlen(REGISTER_PROP) + 2;
