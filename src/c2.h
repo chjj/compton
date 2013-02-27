@@ -35,10 +35,15 @@ typedef struct _c2_l c2_l_t;
 /// Pointer to a condition tree.
 typedef struct {
   bool isbranch : 1;
-  union {
-    c2_b_t *b;
-    c2_l_t *l;
-  };
+#if _GNUC_ > 4 || ( _GNUC_ == 4 && _GNUC_MINOR_ >= 6 ) /// for compatibility with <gcc 4.2 o 4.3
+   union {
+#endif
+     c2_b_t *b;
+     c2_l_t *l;
+#if _GNUC_ > 4 || ( _GNUC_ == 4 && _GNUC_MINOR_ >= 6 )
+   };
+#endif
+
 } c2_ptr_t;
 
 /// Initializer for c2_ptr_t.
