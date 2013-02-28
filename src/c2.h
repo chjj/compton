@@ -35,10 +35,10 @@ typedef struct _c2_l c2_l_t;
 /// Pointer to a condition tree.
 typedef struct {
   bool isbranch : 1;
-  //union {
+  union {
     c2_b_t *b;
     c2_l_t *l;
-  //}; // I have no idea what it was supposed to do without name.
+  };
 } c2_ptr_t;
 
 /// Initializer for c2_ptr_t.
