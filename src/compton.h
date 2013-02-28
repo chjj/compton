@@ -22,7 +22,12 @@
 // We references some definitions in drm.h, which could also be found in
 // /usr/src/linux/include/drm/drm.h, but that path is probably even less
 // reliable than libdrm
-#include <libdrm/drm.h>
+#ifdef __FreeBSD__
+	#include <drm/drm.h>	// under fbsd it's drm/drm.h not libdrm/
+#elif
+	#include <libdrm/drm.h>
+#endif
+
 #include <sys/ioctl.h>
 #include <errno.h>
 #endif
