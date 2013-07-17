@@ -1,0 +1,43 @@
+Source: compton
+Section: x11
+Priority: extra
+Maintainer: Christopher Roy Bratusek <nano@tuxfamily.org>
+Build-Depends: debhelper (>= 8.0.0),
+               libconfig-dev | libconfig8-dev,
+               libx11-dev,
+               libdbus-1-dev,
+               pkg-config,
+               autotools-dev,
+               gcc,
+               libxdamage-dev,
+               libpcre3-dev,
+               libxcomposite-dev,
+               libxext-dev,
+               libxrandr-dev,
+               libxfixes-dev,
+               libgl1-mesa-dev,
+               asciidoc,
+               xsltproc
+Standards-Version: 3.9.4
+Homepage: https://github.com/chjj/compton/
+
+Package: compton
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Avanced, lightweight X11 compositing manager
+ Avanced, lightweight X11 compositing manager. A fork of xcompmgr-dana
+ .
+ Differences compared to the original xcompmgr/xcompmgr-dana
+ .
+ * OpenGL backend (`--backend glx`), in addition to the old X Render backend.
+ * Inactive window transparency (`-i`) / dimming (`--inactive-dim`).
+ * Titlebar/frame transparency (`-e`).
+ * Menu transparency (`-m`, thanks to Dana).
+ * shadows are now enabled for argb windows, e.g. terminals with transparency
+ * removed serverside shadows (and simple compositing) to clean the code, the only option that remains is clientside shadows
+ * configuration files (see the man page for more details)
+ * colored shadows (`--shadow-[red/green/blue]`)
+ * a new fade system
+ * VSync support (not always working)
+ * Blur of background of transparent windows, window color inversion (bad in performance)
+ * Some more options...
