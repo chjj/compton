@@ -85,6 +85,10 @@ CFG += -DCOMPTON_VERSION="\"$(COMPTON_VERSION)\""
 
 LDFLAGS ?= -Wl,-O1 -Wl,--as-needed
 
+ifneq "$(DEBUG)" ""
+  LDFLAGS += -g
+endif
+
 ifeq "$(CFG_DEV)" ""
   CFLAGS ?= -DNDEBUG -O2 -D_FORTIFY_SOURCE=2
 else
