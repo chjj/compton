@@ -124,8 +124,7 @@ glx_init(session_t *ps, bool need_render) {
   if (need_render) {
     glx_on_root_change(ps);
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
+    // glEnable(GL_DEPTH_TEST);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
     glDisable(GL_BLEND);
 
@@ -881,7 +880,7 @@ glx_set_clip(session_t *ps, XserverRegion reg, const reg_data_t *pcache_reg) {
 
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    // glDepthMask(GL_TRUE);
+    glDepthMask(GL_TRUE);
   }
 
   cxfree(rects_free);

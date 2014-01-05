@@ -219,7 +219,7 @@ paint_isvalid(session_t *ps, const paint_t *ppaint) {
   if (!ppaint)
     return false;
 
-  if (bkend_use_xrender(ps) && !ppaint->pict)
+  if (BKEND_XRENDER == ps->o.backend && !ppaint->pict)
     return false;
 
 #ifdef CONFIG_VSYNC_OPENGL
@@ -229,29 +229,22 @@ paint_isvalid(session_t *ps, const paint_t *ppaint) {
 
   return true;
 }
-
 /**
  * Bind texture in paint_t if we are using GLX backend.
  */
 static inline bool
-paint_bind_tex_real(session_t *ps, paint_t *ppaint,
-    unsigned wid, unsigned hei, unsigned depth, bool force) {
-#ifdef CONFIG_VSYNC_OPENGL
-  if (!ppaint->pixmap)
-    return false;
-
-  if (force || !glx_tex_binded(ppaint->ptex, ppaint->pixmap))
-    return glx_bind_pixmap(ps, &ppaint->ptex, ppaint->pixmap, wid, hei, depth);
-#endif
-
-  return true;
-}
-
-static inline bool
 paint_bind_tex(session_t *ps, paint_t *ppaint,
     unsigned wid, unsigned hei, unsigned depth, bool force) {
-  if (BKEND_GLX == ps->o.backend)
-    return paint_bind_tex_real(ps, ppaint, wid, hei, depth, force);
+#ifdef CONFIG_VSYNC_OPENGL
+  if (BKEND_GLX == ps->o.backend) {
+    if (!ppaint->pixmap)
+      return false;
+
+    if (force || !glx_tex_binded(ppaint->ptex, ppaint->pixmap))
+      return glx_bind_pixmap(ps, &ppaint->ptex, ppaint->pixmap, wid, hei, depth);
+  }
+#endif
+
   return true;
 }
 
@@ -344,7 +337,9 @@ isdamagenotify(session_t *ps, const XEvent *ev) {
  */
 static inline XTextProperty *
 make_text_prop(session_t *ps, char *str) {
-  XTextProperty *pprop = cmalloc(1, XTextProperty);
+  XTextProperty *pprop = malloc(sizeof(XTextProperty));
+  if (!pprop)
+    printf_errfq(1, "(): Failed to allocate memory.");
 
   if (XmbTextListToTextProperty(ps->dpy, &str, 1,  XStringStyle, pprop)) {
     cxfree(pprop->value);
@@ -353,25 +348,6 @@ make_text_prop(session_t *ps, char *str) {
   }
 
   return pprop;
-}
-
-
-/**
- * Set a single-string text property on a window.
- */
-static inline bool
-wid_set_text_prop(session_t *ps, Window wid, Atom prop_atom, char *str) {
-  XTextProperty *pprop = make_text_prop(ps, str);
-  if (!pprop) {
-    printf_errf("(\"%s\"): Failed to make text property.", str);
-    return false;
-  }
-
-  XSetTextProperty(ps->dpy, wid, pprop, prop_atom);
-  cxfree(pprop->value);
-  cxfree(pprop);
-
-  return true;
 }
 
 static void
@@ -686,8 +662,7 @@ static inline void
 set_tgt_clip(session_t *ps, XserverRegion reg, const reg_data_t *pcache_reg) {
   switch (ps->o.backend) {
     case BKEND_XRENDER:
-    case BKEND_XR_GLX_HYBRID:
-      XFixesSetPictureClipRegion(ps->dpy, ps->tgt_buffer.pict, 0, 0, reg);
+      XFixesSetPictureClipRegion(ps->dpy, ps->tgt_buffer, 0, 0, reg);
       break;
 #ifdef CONFIG_VSYNC_OPENGL
     case BKEND_GLX:
