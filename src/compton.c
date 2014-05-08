@@ -2632,29 +2632,6 @@ win_on_factor_change(session_t *ps, win *w) {
 }
 
 /**
- * Process needed window updates.
- */
-static void
-win_upd_run(session_t *ps, win *w, win_upd_t *pupd) {
-  if (pupd->shadow) {
-    win_determine_shadow(ps, w);
-    pupd->shadow = false;
-  }
-  if (pupd->fade) {
-    win_determine_fade(ps, w);
-    pupd->fade = false;
-  }
-  if (pupd->invert_color) {
-    win_determine_invert_color(ps, w);
-    pupd->invert_color = false;
-  }
-  if (pupd->focus) {
-    win_update_focused(ps, w);
-    pupd->focus = false;
-  }
-}
-
-/**
  * Update cache data in struct _win that depends on window size.
  */
 static void
@@ -5458,7 +5435,12 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
       && !parse_conv_kern_lst(ps, sval, ps->o.blur_kerns, MAX_BLUR_PASS))
     exit(1);
   // --resize-damage
-  config_lookup_int(&cfg, "resize-damage", &ps->o.resize_damage);
+  {
+      long int xx;
+      config_lookup_int(&cfg, "resize-damage", &xx);
+      ps->o.resize_damage = xx;
+  }
+
   // --glx-no-stencil
   lcfg_lookup_bool(&cfg, "glx-no-stencil", &ps->o.glx_no_stencil);
   // --glx-copy-from-front
