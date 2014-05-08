@@ -856,9 +856,6 @@ static void
 win_on_factor_change(session_t *ps, win *w);
 
 static void
-win_upd_run(session_t *ps, win *w, win_upd_t *pupd);
-
-static void
 calc_win_size(session_t *ps, win *w);
 
 static void

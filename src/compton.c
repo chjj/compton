@@ -2632,29 +2632,6 @@ win_on_factor_change(session_t *ps, win *w) {
 }
 
 /**
- * Process needed window updates.
- */
-static void
-win_upd_run(session_t *ps, win *w, win_upd_t *pupd) {
-  if (pupd->shadow) {
-    win_determine_shadow(ps, w);
-    pupd->shadow = false;
-  }
-  if (pupd->fade) {
-    win_determine_fade(ps, w);
-    pupd->fade = false;
-  }
-  if (pupd->invert_color) {
-    win_determine_invert_color(ps, w);
-    pupd->invert_color = false;
-  }
-  if (pupd->focus) {
-    win_update_focused(ps, w);
-    pupd->focus = false;
-  }
-}
-
-/**
  * Update cache data in struct _win that depends on window size.
  */
 static void
