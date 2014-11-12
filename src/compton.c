@@ -156,6 +156,9 @@ set_fade_callback(session_t *ps, win *w,
   w->fade_callback = callback;
   // Must be the last line as the callback could destroy w!
   if (exec_callback && old_callback) {
+#ifdef DEBUG_FADE
+    printf_dbgf("(%#010lx): exec callback\n", w->id);
+#endif
     old_callback(ps, w);
     // Although currently no callback function affects window state on
     // next paint, it could, in the future
@@ -2241,9 +2244,15 @@ map_win(session_t *ps, Window id) {
 static void
 finish_map_win(session_t *ps, win *w) {
   w->in_openclose = false;
+#ifdef DEBUG_FADE
+  printf_dbgf("(%#010lx)\n", w->id);
+#endif
   if (ps->o.no_fading_openclose) {
     win_determine_fade(ps, w);
   }
+#ifdef DEBUG_FADE
+  printf_dbgf("(%#010lx): end\n", w->id);
+#endif
 }
 
 static void
@@ -2414,12 +2423,23 @@ calc_dim(session_t *ps, win *w) {
  */
 static void
 win_determine_fade(session_t *ps, win *w) {
-  if (UNSET != w->fade_force)
-    w->fade = w->fade_force;
-  else if (ps->o.no_fading_openclose && w->in_openclose)
+  if (UNSET != w->fade_force) {
+#ifdef DEBUG_FADE
+      printf_dbgf("(%#010lx): fade forced\n", w->id);
+#endif
+      w->fade = w->fade_force;
+  }
+  else if (ps->o.no_fading_openclose && (w->in_openclose || w->destroyed)) {
+#ifdef DEBUG_FADE
+    printf_dbgf("(): no_fading_openclose and in_openclose\n");
+#endif
     w->fade = false;
+  }
   else if (ps->o.no_fading_destroyed_argb && w->destroyed
       && WMODE_ARGB == w->mode && w->client_win && w->client_win != w->id) {
+#ifdef DEBUG_FADE
+    printf_dbgf("(): no_fading_destroyed_argb\n");
+#endif
     w->fade = false;
     // Prevent it from being overwritten by last-paint value
     w->fade_last = false;
@@ -2427,11 +2447,29 @@ win_determine_fade(session_t *ps, win *w) {
   // Ignore other possible causes of fading state changes after window
   // gets unmapped
   else if (IsViewable != w->a.map_state) {
+#ifdef DEBUG_FADE
+    printf_dbgf("(): ignored: !IsViewable\n");
+#endif
   }
-  else if (win_match(ps, w, ps->o.fade_blacklist, &w->cache_fblst))
+  else if (win_match(ps, w, ps->o.fade_blacklist, &w->cache_fblst)) {
+
     w->fade = false;
-  else
-    w->fade = ps->o.wintype_fade[w->window_type];
+  }
+  else if (ps->o.wintype_fade[w->window_type] != NULL) {
+      w->fade = ps->o.wintype_fade[w->window_type];
+#ifdef DEBUG_FADE
+      printf_dbgf("(%#010lx): via wintype_fade[%s]\n",
+          w->id, WINTYPES[w->window_type]);
+#endif
+  } else {
+#ifdef DEBUG_FADE
+    printf_dbgf("(): fallthrough\n");
+#endif
+  }
+
+#ifdef DEBUG_FADE
+  printf_dbgf("(%#010lx): fade = %d\n", w->id, w->fade ? w->fade : NULL);
+#endif
 }
 
 /**
