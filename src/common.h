@@ -33,6 +33,7 @@
 // #define DEBUG_GLX_MARK   1
 // #define DEBUG_GLX_PAINTREG 1
 // #define MONITOR_REPAINT  1
+// #define DEBUG_FADE       1
 
 // Whether to enable PCRE regular expression support in blacklists, enabled
 // by default
