@@ -190,6 +190,15 @@ OPTIONS
 *--inactive-dim-fixed*::
 	Use fixed inactive dim value, instead of adjusting according to window opacity.
 
+*--inactive-dim-fading*::
+	Dim inactive windows gradually rather than instantaneously.
+
+*--inactive-dim-step*::
+	Opacity change between steps while dimming an inactive window.
+
+*--inactive-undim-step*::
+	Opacity change between steps while undimming an active window.
+
 *--detect-transient*::
 	Use 'WM_TRANSIENT_FOR' to group windows, and consider windows in the same group focused at the same time.
 

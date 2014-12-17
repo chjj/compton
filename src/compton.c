@@ -163,6 +163,39 @@ set_fade_callback(session_t *ps, win *w,
   }
 }
 
+// === Dimming ===
+
+/**
+ * Run dimming on a window.
+ *
+ * @param steps steps of dimming
+ */
+static void
+run_dim(session_t *ps, win *w, unsigned steps) {
+  // If dim has reached target opacity, return
+  if (w->dim_opacity == w->dim_opacity_tgt) {
+    return;
+  }
+
+  if (!ps->o.inactive_dim_fading)
+    w->dim_opacity = w->dim_opacity_tgt;
+  else if (steps) {
+    if (w->dim_opacity < w->dim_opacity_tgt)
+      w->dim_opacity = normalize_d_range(
+          w->dim_opacity + ps->o.inactive_dim_step * steps,
+          0.0, w->dim_opacity_tgt);
+    else
+      w->dim_opacity = normalize_d_range(
+          w->dim_opacity - ps->o.inactive_undim_step * steps,
+          w->dim_opacity_tgt, 1.0);
+  }
+  add_damage_win(ps, w);
+
+  if (w->dim_opacity != w->dim_opacity_tgt) {
+    ps->idling = false;
+  }
+}
+
 // === Shadows ===
 
 static double __attribute__((const))
@@ -1133,8 +1166,9 @@ paint_preprocess(session_t *ps, win *list) {
       calc_dim(ps, w);
     }
 
-    // Run fading
+    // Run fading and dimming
     run_fade(ps, w, steps);
+    run_dim(ps, w, steps);
 
     // Opacity will not change, from now on.
 
@@ -1689,8 +1723,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
     free_picture(ps, &pict);
 
   // Dimming the window if needed
-  if (w->dim) {
-    double dim_opacity = ps->o.inactive_dim;
+  if (w->dim_opacity) {
+    double dim_opacity = w->dim_opacity;
     if (!ps->o.inactive_dim_fixed)
       dim_opacity *= get_opacity_percent(w);
 
@@ -2403,10 +2437,7 @@ calc_dim(session_t *ps, win *w) {
     dim = false;
   }
 
-  if (dim != w->dim) {
-    w->dim = dim;
-    add_damage_win(ps, w);
-  }
+  w->dim_opacity_tgt = dim ? ps->o.inactive_dim : 0.0;
 }
 
 /**
@@ -2910,7 +2941,8 @@ add_win(session_t *ps, Window id, Window prev) {
     .shadow_paint = PAINT_INIT,
     .prop_shadow = -1,
 
-    .dim = false,
+    .dim_opacity = 0.0,
+    .dim_opacity_tgt = 0.0,
 
     .invert_color = false,
     .invert_color_force = UNSET,
@@ -4668,6 +4700,15 @@ usage(int ret) {
     "--inactive-dim-fixed\n"
     "  Use fixed inactive dim value.\n"
     "\n"
+    "--inactive-dim-fading\n"
+    "  Dim inactive windows gradually rather than instantaneously.\n"
+    "\n"
+    "--inactive-dim-step\n"
+    "  Opacity change between steps while dimming an inactive window.\n"
+    "\n"
+    "--inactive-undim-step\n"
+    "  Opacity change between steps while undimming an active window.\n"
+    "\n"
     "--detect-transient\n"
     "  Use WM_TRANSIENT_FOR to group windows, and consider windows in\n"
     "  the same group focused at the same time.\n"
@@ -5573,6 +5614,12 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
     ps->o.unredir_if_possible_delay = ival;
   // --inactive-dim-fixed
   lcfg_lookup_bool(&cfg, "inactive-dim-fixed", &ps->o.inactive_dim_fixed);
+  // --inactive-dim-fading
+  lcfg_lookup_bool(&cfg, "inactive-dim-fading", &ps->o.inactive_dim_fading);
+  // --inactive-dim-step
+  config_lookup_float(&cfg, "inactive-dim-step", &ps->o.inactive_dim_step);
+  // --inactive-undim-step
+  config_lookup_float(&cfg, "inactive-undim-step", &ps->o.inactive_undim_step);
   // --detect-transient
   lcfg_lookup_bool(&cfg, "detect-transient", &ps->o.detect_transient);
   // --detect-client-leader
@@ -5738,6 +5785,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
+    { "inactive-dim-fading", no_argument, NULL, 321 },
+    { "inactive-dim-step", required_argument, NULL, 322 },
+    { "inactive-undim-step", required_argument, NULL, 323 },
     { "reredir-on-root-change", no_argument, NULL, 731 },
     { "glx-reinit-on-root-change", no_argument, NULL, 732 },
     // Must terminate with a NULL entry
@@ -6009,6 +6059,13 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
         break;
       P_CASEBOOL(319, no_x_selection);
+      P_CASEBOOL(321, inactive_dim_fading);
+      case 322:
+        ps->o.inactive_dim_step = atof(optarg);
+        break;
+      case 323:
+        ps->o.inactive_undim_step = atof(optarg);
+        break;
       P_CASEBOOL(731, reredir_on_root_change);
       P_CASEBOOL(732, glx_reinit_on_root_change);
       default:
@@ -7016,6 +7073,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .blur_kerns = { NULL },
       .inactive_dim = 0.0,
       .inactive_dim_fixed = false,
+      .inactive_dim_fading = false,
+      .inactive_dim_step = 0.05,
+      .inactive_undim_step = 0.05,
       .invert_color_list = NULL,
       .opacity_rules = NULL,
 
