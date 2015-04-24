@@ -241,7 +241,7 @@ May also be one of the predefined kernels: `3x3box` (default), `5x5box`, `7x7box
 	Crop shadow of a window fully on a particular Xinerama screen to the screen.
 
 *--backend* 'BACKEND'::
-	Specify the backend to use: `xrender` or `glx`. GLX (OpenGL) backend generally has much superior performance as far as you have a graphic card/chip and driver.
+	Specify the backend to use: `xrender`, `glx` or `xr_glx_hybrid`. GLX (OpenGL) backend generally has much superior performance as far as you have a graphic card/chip and driver. Issues with GLX like stuttering (especially in combination with the use of xft fonts) might be resolved using the hybrid backend.
 
 *--glx-no-stencil*::
   GLX backend: Avoid using stencil buffer, useful if you don't have a stencil buffer. Might cause incorrect opacity when rendering transparent content (but never practically happened) and may not work with *--blur-background*. My tests show a 15% performance boost. Recommended.
