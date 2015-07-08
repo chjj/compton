@@ -1558,7 +1558,7 @@ glx_render_(session_t *ps, const glx_texture_t *ptex,
 #endif
 
 #ifdef DEBUG_GLX
-  printf_dbgf("(): Draw: %d, %d, %d, %d -> %d, %d (%d, %d) z %d\n", x, y, width, height, dx, dy, ptex->width, ptex->height, z);
+  printf_dbgf("(): Draw: %d, %d, %d, %d -> %d, %d (%d, %d) z %d Opacity %g\n", x, y, width, height, dx, dy, ptex->width, ptex->height, z, opacity);
 #endif
 
   // Bind texture

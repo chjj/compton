@@ -576,6 +576,9 @@ typedef struct _options_t {
   bool paint_on_overlay;
   /// Force painting of window content with blending.
   bool force_win_blend;
+
+  bool tommy_flag;  // Grab BG color from GTK settings and use them on the custom shader
+
   /// Resize damage for a specific number of pixels.
   int resize_damage;
   /// Whether to unredirect all windows if a full-screen opaque window
