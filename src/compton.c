@@ -5471,6 +5471,7 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
         path, config_error_line(&cfg), config_error_text(&cfg));
     config_destroy(&cfg);
     free(path);
+    fclose(f);
     return;
   }
   config_set_auto_convert(&cfg, 1);
@@ -5659,6 +5660,7 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   }
 
   config_destroy(&cfg);
+  fclose(f);
 }
 #endif
 
