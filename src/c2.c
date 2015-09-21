@@ -596,9 +596,9 @@ c2_parse_pattern(session_t *ps, const char *pattern, int offset, c2_ptr_t *presu
                         char *pstr = NULL;
                         long val = strtol(tstr, &pstr,
                             ('o' == pattern[offset] ? 8: 16));
-                        free(tstr);
                         if (pstr != &tstr[2] || val <= 0)
                           c2_error("Invalid octal/hex escape sequence.");
+                        free(tstr);
                         assert(val < 256 && val >= 0);
                         *(ptptnstr++) = val;
                         offset += 2;
