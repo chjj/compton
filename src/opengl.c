@@ -402,7 +402,13 @@ glx_init_blur(session_t *ps) {
 
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
   {
-    char *lc_numeric_old = mstrcpy(setlocale(LC_NUMERIC, NULL));
+    char *locale_old = setlocale(LC_NUMERIC, NULL);
+    if (!locale_old){
+      printf_errf("(): Failed to allocate memory for old locale.");
+      exit(1);
+    }
+    char *lc_numeric_old = mstrcpy(locale_old);
+
     // Enforce LC_NUMERIC locale "C" here to make sure decimal point is sane
     // Thanks to hiciu for reporting.
     setlocale(LC_NUMERIC, "C");
@@ -752,6 +758,10 @@ glx_bind_pixmap(session_t *ps, glx_texture_t **pptex, Pixmap pixmap,
     };
 
     ptex = malloc(sizeof(glx_texture_t));
+    if (!ptex){
+      printf_errf("(): Failed to allocate memory for pixmap.");
+      exit(1);
+    }
     allocchk(ptex);
     memcpy(ptex, &GLX_TEX_DEF, sizeof(glx_texture_t));
     *pptex = ptex;
