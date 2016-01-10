@@ -2400,13 +2400,10 @@ calc_dim(session_t *ps, win *w) {
   if (w->destroyed || IsViewable != w->a.map_state)
     return;
 
-  if (ps->o.inactive_dim && !(w->focused)) {
+  if (ps->o.inactive_dim && !(w->focused) && !win_match(ps, w, ps->o.dim_blacklist, &w->cache_dimblst)
+) {
     dim = true;
   } else {
-    dim = false;
-  }
-
-  if(win_match(ps, w, ps->o.dim_blacklist, &w->cache_dimblst)) {
     dim = false;
   }
 
