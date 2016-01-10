@@ -714,6 +714,8 @@ typedef struct _options_t {
   /// Whether to use fixed inactive dim opacity, instead of deciding
   /// based on window opacity.
   bool inactive_dim_fixed;
+  /// Dim blacklist. A linked list of conditions.
+  c2_lptr_t *dim_blacklist;
   /// Conditions of windows to have inverted colors.
   c2_lptr_t *invert_color_list;
   /// Rules to change window opacity.
@@ -1156,6 +1158,7 @@ typedef struct _win {
   const c2_lptr_t *cache_oparule;
   const c2_lptr_t *cache_pblst;
   const c2_lptr_t *cache_uipblst;
+  const c2_lptr_t *cache_dimblst;
 
   // Opacity-related members
   /// Current window opacity.

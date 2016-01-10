@@ -2406,6 +2406,10 @@ calc_dim(session_t *ps, win *w) {
     dim = false;
   }
 
+  if(win_match(ps, w, ps->o.dim_blacklist, &w->cache_dimblst)) {
+    dim = false;
+  }
+
   if (dim != w->dim) {
     w->dim = dim;
     add_damage_win(ps, w);
@@ -5751,6 +5755,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
+    { "inactive-dim-exclude", required_argument, NULL, 321 },
     { "reredir-on-root-change", no_argument, NULL, 731 },
     { "glx-reinit-on-root-change", no_argument, NULL, 732 },
     // Must terminate with a NULL entry
@@ -6024,6 +6029,10 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(319, no_x_selection);
       P_CASEBOOL(731, reredir_on_root_change);
       P_CASEBOOL(732, glx_reinit_on_root_change);
+      case 321:
+        // --inactive-dim-exclude
+        condlst_add(ps, &ps->o.dim_blacklist, optarg);
+        break;
       default:
         usage(1);
         break;
@@ -7029,6 +7038,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .blur_kerns = { NULL },
       .inactive_dim = 0.0,
       .inactive_dim_fixed = false,
+      .dim_blacklist = NULL,
       .invert_color_list = NULL,
       .opacity_rules = NULL,
 
@@ -7514,6 +7524,7 @@ session_destroy(session_t *ps) {
   free_wincondlst(&ps->o.focus_blacklist);
   free_wincondlst(&ps->o.invert_color_list);
   free_wincondlst(&ps->o.blur_background_blacklist);
+  free_wincondlst(&ps->o.dim_blacklist);
   free_wincondlst(&ps->o.opacity_rules);
   free_wincondlst(&ps->o.paint_blacklist);
   free_wincondlst(&ps->o.unredir_if_possible_blacklist);
