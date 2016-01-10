@@ -2890,6 +2890,7 @@ add_win(session_t *ps, Window id, Window prev) {
     .cache_ivclst = NULL,
     .cache_bbblst = NULL,
     .cache_oparule = NULL,
+    .cache_dimblst = NULL,
 
     .opacity = 0,
     .opacity_tgt = 0,
