@@ -232,13 +232,12 @@ cdbus_callback_watch_toggled(DBusWatch *watch, void *data) {
  * Callback to append a bool argument to a message.
  */
 static bool
-cdbus_apdarg_bool(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_bool(session_t *ps, DBusMessageIter *iter, const void *data) {
   assert(data);
 
   dbus_bool_t val = *(const bool *) data;
 
-  if (!dbus_message_append_args(msg, DBUS_TYPE_BOOLEAN, &val,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_BOOLEAN, &val)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -250,9 +249,8 @@ cdbus_apdarg_bool(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append an int32 argument to a message.
  */
 static bool
-cdbus_apdarg_int32(session_t *ps, DBusMessage *msg, const void *data) {
-  if (!dbus_message_append_args(msg, DBUS_TYPE_INT32, data,
-        DBUS_TYPE_INVALID)) {
+cdbus_apdarg_int32(session_t *ps, DBusMessageIter *iter, const void *data) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_INT32, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -264,9 +262,8 @@ cdbus_apdarg_int32(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append an uint32 argument to a message.
  */
 static bool
-cdbus_apdarg_uint32(session_t *ps, DBusMessage *msg, const void *data) {
-  if (!dbus_message_append_args(msg, DBUS_TYPE_UINT32, data,
-        DBUS_TYPE_INVALID)) {
+cdbus_apdarg_uint32(session_t *ps, DBusMessageIter *iter, const void *data) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_UINT32, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -278,9 +275,8 @@ cdbus_apdarg_uint32(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append a double argument to a message.
  */
 static bool
-cdbus_apdarg_double(session_t *ps, DBusMessage *msg, const void *data) {
-  if (!dbus_message_append_args(msg, DBUS_TYPE_DOUBLE, data,
-        DBUS_TYPE_INVALID)) {
+cdbus_apdarg_double(session_t *ps, DBusMessageIter *iter, const void *data) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_DOUBLE, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -292,12 +288,11 @@ cdbus_apdarg_double(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append a Window argument to a message.
  */
 static bool
-cdbus_apdarg_wid(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_wid(session_t *ps, DBusMessageIter *iter, const void *data) {
   assert(data);
   cdbus_window_t val = *(const Window *)data;
 
-  if (!dbus_message_append_args(msg, CDBUS_TYPE_WINDOW, &val,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, CDBUS_TYPE_WINDOW, &val)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -309,10 +304,9 @@ cdbus_apdarg_wid(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append an cdbus_enum_t argument to a message.
  */
 static bool
-cdbus_apdarg_enum(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_enum(session_t *ps, DBusMessageIter *iter, const void *data) {
   assert(data);
-  if (!dbus_message_append_args(msg, CDBUS_TYPE_ENUM, data,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, CDBUS_TYPE_ENUM, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -324,13 +318,12 @@ cdbus_apdarg_enum(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append a string argument to a message.
  */
 static bool
-cdbus_apdarg_string(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_string(session_t *ps, DBusMessageIter *iter, const void *data) {
   const char *str = data;
   if (!str)
     str = "";
 
-  if (!dbus_message_append_args(msg, DBUS_TYPE_STRING, &str,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &str)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -342,7 +335,7 @@ cdbus_apdarg_string(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append all window IDs to a message.
  */
 static bool
-cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_wids(session_t *ps, DBusMessageIter *iter, const void *data) {
   // Get the number of wids we are to include
   unsigned count = 0;
   for (win *w = ps->list; w; w = w->next) {
@@ -371,9 +364,24 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
   }
 
   // Append arguments
-  if (!dbus_message_append_args(msg, DBUS_TYPE_ARRAY, CDBUS_TYPE_WINDOW,
-        &arr, count, DBUS_TYPE_INVALID)) {
+  DBusMessageIter subiter;
+  if (!dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY,
+        CDBUS_TYPE_WINDOW_STR, &subiter)) {
+    printf_errf("(): Failed to append array container.");
+    free(arr);
+    return false;
+  }
+
+  if (!dbus_message_iter_append_fixed_array(&subiter, CDBUS_TYPE_WINDOW,
+        &arr, count)) {
     printf_errf("(): Failed to append argument.");
+    dbus_message_iter_abandon_container(iter, &subiter);
+    free(arr);
+    return false;
+  }
+
+  if (!dbus_message_iter_close_container(iter, &subiter)) {
+    printf_errf("(): Failed to close array container.");
     free(arr);
     return false;
   }
@@ -394,7 +402,7 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
  */
 static bool
 cdbus_signal(session_t *ps, const char *name,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data) {
   DBusMessage* msg = NULL;
 
@@ -407,9 +415,13 @@ cdbus_signal(session_t *ps, const char *name,
   }
 
   // Append arguments onto message
-  if (func && !func(ps, msg, data)) {
-    dbus_message_unref(msg);
-    return false;
+  if (func) {
+    DBusMessageIter iter;
+    dbus_message_iter_init_append(msg, &iter);
+    if (!func(ps, &iter, data)) {
+      dbus_message_unref(msg);
+      return false;
+    }
   }
 
   // Send the message and flush the connection
@@ -437,7 +449,7 @@ cdbus_signal(session_t *ps, const char *name,
  */
 static bool
 cdbus_reply(session_t *ps, DBusMessage *srcmsg,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data) {
   DBusMessage* msg = NULL;
 
@@ -449,9 +461,13 @@ cdbus_reply(session_t *ps, DBusMessage *srcmsg,
   }
 
   // Append arguments onto message
-  if (func && !func(ps, msg, data)) {
-    dbus_message_unref(msg);
-    return false;
+  if (func) {
+    DBusMessageIter iter;
+    dbus_message_iter_init_append(msg, &iter);
+    if (!func(ps, &iter, data)) {
+      dbus_message_unref(msg);
+      return false;
+    }
   }
 
   // Send the message and flush the connection

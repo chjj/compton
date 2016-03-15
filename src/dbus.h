@@ -80,28 +80,28 @@ static void
 cdbus_callback_watch_toggled(DBusWatch *watch, void *data);
 
 static bool
-cdbus_apdarg_bool(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_bool(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_int32(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_int32(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_uint32(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_uint32(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_double(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_double(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_wid(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_wid(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_enum(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_enum(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_string(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_string(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_wids(session_t *ps, DBusMessageIter *iter, const void *data);
 
 /** @name DBus signal sending
  */
@@ -109,7 +109,7 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data);
 
 static bool
 cdbus_signal(session_t *ps, const char *name,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data);
 
 /**
@@ -136,7 +136,7 @@ cdbus_signal_wid(session_t *ps, const char *name, Window wid) {
 
 static bool
 cdbus_reply(session_t *ps, DBusMessage *srcmsg,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data);
 
 static bool
