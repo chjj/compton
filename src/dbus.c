@@ -898,7 +898,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 #define cdbus_m_win_set_do(tgt, type, real_type) \
   if (!strcmp(MSTR(tgt), target)) { \
     real_type val; \
-    if (!cdbus_msg_get_arg(msg, 2, type, &val)) \
+    if (!cdbus_msg_get_variant_arg(msg, 2, type, &val)) \
       return false; \
     w->tgt = val; \
     goto cdbus_process_win_set_success; \
@@ -906,7 +906,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("shadow_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_shadow_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -914,7 +914,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("fade_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_fade_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -922,7 +922,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("focused_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_focused_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -930,7 +930,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("invert_color_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_invert_color_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -1289,6 +1289,7 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "    <method name='win_set'>\n"
     "      <arg name='wid' direction='in' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"
     "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='in' type='v' />\n"
     "    </method>\n"
     "    <method name='find_win'>\n"
     "      <arg name='target' direction='in' type='s' />\n"
