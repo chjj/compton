@@ -485,6 +485,64 @@ cdbus_reply(session_t *ps, DBusMessage *srcmsg,
 }
 
 /**
+ * Send a D-Bus reply wrapped in a Variant.
+ *
+ * @param ps current session
+ * @param srcmsg original message
+ * @param func a function that modifies the built message, to, for example,
+ *        add an argument
+ * @param data data pointer to pass to the function
+ */
+static bool
+cdbus_reply_variant(session_t *ps, DBusMessage *srcmsg,
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
+    const char *type, const void *data) {
+  DBusMessage* msg = NULL;
+
+  // Create a reply
+  msg = dbus_message_new_method_return(srcmsg);
+  if (!msg) {
+    printf_errf("(): Failed to create D-Bus reply.");
+    return false;
+  }
+
+  // Append arguments onto message
+  if (func) {
+    DBusMessageIter iter, subiter;
+    dbus_message_iter_init_append(msg, &iter);
+
+    if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT, type,
+          &subiter)) {
+      dbus_message_unref(msg);
+      return false;
+    }
+
+    if (!func(ps, &subiter, data)) {
+      dbus_message_unref(msg);
+      return false;
+    }
+
+    if (!dbus_message_iter_close_container(&iter, &subiter)) {
+      dbus_message_unref(msg);
+      return false;
+    }
+  }
+
+  // Send the message and flush the connection
+  if (!dbus_connection_send(ps->dbus_conn, msg, NULL)) {
+    printf_errf("(): Failed to send D-Bus reply.");
+    dbus_message_unref(msg);
+    return false;
+  }
+  dbus_connection_flush(ps->dbus_conn);
+
+  // Free the message
+  dbus_message_unref(msg);
+
+  return true;
+}
+
+/**
  * Send a D-Bus error reply.
  *
  * @param ps current session
@@ -697,69 +755,69 @@ cdbus_process_win_get(session_t *ps, DBusMessage *msg) {
     return true; \
   }
 
-  cdbus_m_win_get_do(id, cdbus_reply_wid);
+  cdbus_m_win_get_do(id, cdbus_reply_variant_wid);
 
   // next
   if (!strcmp("next", target)) {
-    cdbus_reply_wid(ps, msg, (w->next ? w->next->id: 0));
+    cdbus_reply_variant_wid(ps, msg, (w->next ? w->next->id: 0));
     return true;
   }
 
   // map_state
   if (!strcmp("map_state", target)) {
-    cdbus_reply_bool(ps, msg, w->a.map_state);
+    cdbus_reply_variant_bool(ps, msg, w->a.map_state);
     return true;
   }
 
-  cdbus_m_win_get_do(mode, cdbus_reply_enum);
-  cdbus_m_win_get_do(client_win, cdbus_reply_wid);
-  cdbus_m_win_get_do(damaged, cdbus_reply_bool);
-  cdbus_m_win_get_do(destroyed, cdbus_reply_bool);
-  cdbus_m_win_get_do(window_type, cdbus_reply_enum);
-  cdbus_m_win_get_do(wmwin, cdbus_reply_bool);
-  cdbus_m_win_get_do(leader, cdbus_reply_wid);
+  cdbus_m_win_get_do(mode, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(client_win, cdbus_reply_variant_wid);
+  cdbus_m_win_get_do(damaged, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(destroyed, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(window_type, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(wmwin, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(leader, cdbus_reply_variant_wid);
   // focused_real
   if (!strcmp("focused_real", target)) {
-    cdbus_reply_bool(ps, msg, win_is_focused_real(ps, w));
+    cdbus_reply_variant_bool(ps, msg, win_is_focused_real(ps, w));
     return true;
   }
-  cdbus_m_win_get_do(fade_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(shadow_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(focused_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(invert_color_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(name, cdbus_reply_string);
-  cdbus_m_win_get_do(class_instance, cdbus_reply_string);
-  cdbus_m_win_get_do(class_general, cdbus_reply_string);
-  cdbus_m_win_get_do(role, cdbus_reply_string);
+  cdbus_m_win_get_do(fade_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(shadow_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(focused_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(invert_color_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(name, cdbus_reply_variant_string);
+  cdbus_m_win_get_do(class_instance, cdbus_reply_variant_string);
+  cdbus_m_win_get_do(class_general, cdbus_reply_variant_string);
+  cdbus_m_win_get_do(role, cdbus_reply_variant_string);
 
-  cdbus_m_win_get_do(opacity, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_tgt, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_prop, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_prop_client, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_set, cdbus_reply_uint32);
+  cdbus_m_win_get_do(opacity, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_tgt, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_prop, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_prop_client, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_set, cdbus_reply_variant_uint32);
 
-  cdbus_m_win_get_do(frame_opacity, cdbus_reply_double);
+  cdbus_m_win_get_do(frame_opacity, cdbus_reply_variant_double);
   if (!strcmp("left_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.left);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.left);
     return true;
   }
   if (!strcmp("right_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.right);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.right);
     return true;
   }
   if (!strcmp("top_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.top);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.top);
     return true;
   }
   if (!strcmp("bottom_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.bottom);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.bottom);
     return true;
   }
 
-  cdbus_m_win_get_do(shadow, cdbus_reply_bool);
-  cdbus_m_win_get_do(fade, cdbus_reply_bool);
-  cdbus_m_win_get_do(invert_color, cdbus_reply_bool);
-  cdbus_m_win_get_do(blur_background, cdbus_reply_bool);
+  cdbus_m_win_get_do(shadow, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(fade, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(invert_color, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(blur_background, cdbus_reply_variant_bool);
 #undef cdbus_m_win_get_do
 
   printf_errf("(): " CDBUS_ERROR_BADTGT_S, target);
@@ -1184,6 +1242,7 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "    <method name='win_get'>\n"
     "      <arg name='wid' direction='in' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"
     "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='out' type='v' />\n"
     "    </method>\n"
     "    <method name='win_set'>\n"
     "      <arg name='wid' direction='in' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"

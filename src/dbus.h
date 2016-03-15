@@ -140,6 +140,11 @@ cdbus_reply(session_t *ps, DBusMessage *srcmsg,
     const void *data);
 
 static bool
+cdbus_reply_variant(session_t *ps, DBusMessage *srcmsg,
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
+    const char *type, const void *data);
+
+static bool
 cdbus_reply_errm(session_t *ps, DBusMessage *msg);
 
 #define cdbus_reply_err(ps, srcmsg, err_name, err_format, ...) \
@@ -207,6 +212,69 @@ cdbus_reply_string(session_t *ps, DBusMessage *srcmsg, const char *str) {
 static inline bool
 cdbus_reply_enum(session_t *ps, DBusMessage *srcmsg, cdbus_enum_t eval) {
   return cdbus_reply(ps, srcmsg, cdbus_apdarg_enum, &eval);
+}
+
+/**
+ * Send a reply with a bool argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_bool(session_t *ps, DBusMessage *srcmsg, bool bval) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_bool,
+      DBUS_TYPE_BOOLEAN_AS_STRING, &bval);
+}
+
+/**
+ * Send a reply with an int32 argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_int32(session_t *ps, DBusMessage *srcmsg, int32_t val) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_int32,
+      DBUS_TYPE_INT32_AS_STRING, &val);
+}
+
+/**
+ * Send a reply with an uint32 argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_uint32(session_t *ps, DBusMessage *srcmsg, uint32_t val) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_uint32,
+      DBUS_TYPE_UINT32_AS_STRING, &val);
+}
+
+/**
+ * Send a reply with a double argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_double(session_t *ps, DBusMessage *srcmsg, double val) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_double,
+      DBUS_TYPE_DOUBLE_AS_STRING, &val);
+}
+
+/**
+ * Send a reply with a wid argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_wid(session_t *ps, DBusMessage *srcmsg, Window wid) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_wid,
+      CDBUS_TYPE_WINDOW_STR, &wid);
+}
+
+/**
+ * Send a reply with a string argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_string(session_t *ps, DBusMessage *srcmsg, const char *str) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_string,
+      DBUS_TYPE_STRING_AS_STRING, str);
+}
+
+/**
+ * Send a reply with a enum argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_enum(session_t *ps, DBusMessage *srcmsg, cdbus_enum_t eval) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_enum,
+      CDBUS_TYPE_ENUM_STR, &eval);
 }
 
 ///@}
