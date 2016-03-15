@@ -963,94 +963,94 @@ cdbus_process_opts_get(session_t *ps, DBusMessage *msg) {
 
   // version
   if (!strcmp("version", target)) {
-    cdbus_reply_string(ps, msg, COMPTON_VERSION);
+    cdbus_reply_variant_string(ps, msg, COMPTON_VERSION);
     return true;
   }
 
   // pid
   if (!strcmp("pid", target)) {
-    cdbus_reply_int32(ps, msg, getpid());
+    cdbus_reply_variant_int32(ps, msg, getpid());
     return true;
   }
 
   // display
   if (!strcmp("display", target)) {
-    cdbus_reply_string(ps, msg, DisplayString(ps->dpy));
+    cdbus_reply_variant_string(ps, msg, DisplayString(ps->dpy));
     return true;
   }
 
-  cdbus_m_opts_get_do(config_file, cdbus_reply_string);
-  cdbus_m_opts_get_do(display_repr, cdbus_reply_string);
-  cdbus_m_opts_get_do(write_pid_path, cdbus_reply_string);
-  cdbus_m_opts_get_do(mark_wmwin_focused, cdbus_reply_bool);
-  cdbus_m_opts_get_do(mark_ovredir_focused, cdbus_reply_bool);
-  cdbus_m_opts_get_do(fork_after_register, cdbus_reply_bool);
-  cdbus_m_opts_get_do(detect_rounded_corners, cdbus_reply_bool);
-  cdbus_m_opts_get_do(paint_on_overlay, cdbus_reply_bool);
+  cdbus_m_opts_get_do(config_file, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(display_repr, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(write_pid_path, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(mark_wmwin_focused, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(mark_ovredir_focused, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(fork_after_register, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(detect_rounded_corners, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(paint_on_overlay, cdbus_reply_variant_bool);
   // paint_on_overlay_id: Get ID of the X composite overlay window
   if (!strcmp("paint_on_overlay_id", target)) {
-    cdbus_reply_uint32(ps, msg, ps->overlay);
+    cdbus_reply_variant_uint32(ps, msg, ps->overlay);
     return true;
   }
-  cdbus_m_opts_get_do(unredir_if_possible, cdbus_reply_bool);
-  cdbus_m_opts_get_do(unredir_if_possible_delay, cdbus_reply_int32);
-  cdbus_m_opts_get_do(redirected_force, cdbus_reply_enum);
-  cdbus_m_opts_get_do(stoppaint_force, cdbus_reply_enum);
-  cdbus_m_opts_get_do(logpath, cdbus_reply_string);
-  cdbus_m_opts_get_do(synchronize, cdbus_reply_bool);
+  cdbus_m_opts_get_do(unredir_if_possible, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(unredir_if_possible_delay, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(redirected_force, cdbus_reply_variant_enum);
+  cdbus_m_opts_get_do(stoppaint_force, cdbus_reply_variant_enum);
+  cdbus_m_opts_get_do(logpath, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(synchronize, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(refresh_rate, cdbus_reply_int32);
-  cdbus_m_opts_get_do(sw_opti, cdbus_reply_bool);
+  cdbus_m_opts_get_do(refresh_rate, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(sw_opti, cdbus_reply_variant_bool);
   if (!strcmp("vsync", target)) {
     assert(ps->o.vsync < sizeof(VSYNC_STRS) / sizeof(VSYNC_STRS[0]));
-    cdbus_reply_string(ps, msg, VSYNC_STRS[ps->o.vsync]);
+    cdbus_reply_variant_string(ps, msg, VSYNC_STRS[ps->o.vsync]);
     return true;
   }
   if (!strcmp("backend", target)) {
     assert(ps->o.backend < sizeof(BACKEND_STRS) / sizeof(BACKEND_STRS[0]));
-    cdbus_reply_string(ps, msg, BACKEND_STRS[ps->o.backend]);
+    cdbus_reply_variant_string(ps, msg, BACKEND_STRS[ps->o.backend]);
     return true;
   }
-  cdbus_m_opts_get_do(dbe, cdbus_reply_bool);
-  cdbus_m_opts_get_do(vsync_aggressive, cdbus_reply_bool);
+  cdbus_m_opts_get_do(dbe, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(vsync_aggressive, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(shadow_red, cdbus_reply_double);
-  cdbus_m_opts_get_do(shadow_green, cdbus_reply_double);
-  cdbus_m_opts_get_do(shadow_blue, cdbus_reply_double);
-  cdbus_m_opts_get_do(shadow_radius, cdbus_reply_int32);
-  cdbus_m_opts_get_do(shadow_offset_x, cdbus_reply_int32);
-  cdbus_m_opts_get_do(shadow_offset_y, cdbus_reply_int32);
-  cdbus_m_opts_get_do(shadow_opacity, cdbus_reply_double);
-  cdbus_m_opts_get_do(clear_shadow, cdbus_reply_bool);
-  cdbus_m_opts_get_do(xinerama_shadow_crop, cdbus_reply_bool);
+  cdbus_m_opts_get_do(shadow_red, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(shadow_green, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(shadow_blue, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(shadow_radius, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(shadow_offset_x, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(shadow_offset_y, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(shadow_opacity, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(clear_shadow, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(xinerama_shadow_crop, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(fade_delta, cdbus_reply_int32);
-  cdbus_m_opts_get_do(fade_in_step, cdbus_reply_int32);
-  cdbus_m_opts_get_do(fade_out_step, cdbus_reply_int32);
-  cdbus_m_opts_get_do(no_fading_openclose, cdbus_reply_bool);
+  cdbus_m_opts_get_do(fade_delta, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(fade_in_step, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(fade_out_step, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(no_fading_openclose, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(blur_background, cdbus_reply_bool);
-  cdbus_m_opts_get_do(blur_background_frame, cdbus_reply_bool);
-  cdbus_m_opts_get_do(blur_background_fixed, cdbus_reply_bool);
+  cdbus_m_opts_get_do(blur_background, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(blur_background_frame, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(blur_background_fixed, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(inactive_dim, cdbus_reply_double);
-  cdbus_m_opts_get_do(inactive_dim_fixed, cdbus_reply_bool);
+  cdbus_m_opts_get_do(inactive_dim, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(inactive_dim_fixed, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(use_ewmh_active_win, cdbus_reply_bool);
-  cdbus_m_opts_get_do(detect_transient, cdbus_reply_bool);
-  cdbus_m_opts_get_do(detect_client_leader, cdbus_reply_bool);
+  cdbus_m_opts_get_do(use_ewmh_active_win, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(detect_transient, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(detect_client_leader, cdbus_reply_variant_bool);
 
 #ifdef CONFIG_VSYNC_OPENGL
-  cdbus_m_opts_get_do(glx_no_stencil, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_copy_from_front, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_use_copysubbuffermesa, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_no_rebind_pixmap, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_swap_method, cdbus_reply_int32);
+  cdbus_m_opts_get_do(glx_no_stencil, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_copy_from_front, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_use_copysubbuffermesa, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_no_rebind_pixmap, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_swap_method, cdbus_reply_variant_int32);
 #endif
 
-  cdbus_m_opts_get_do(track_focus, cdbus_reply_bool);
-  cdbus_m_opts_get_do(track_wdata, cdbus_reply_bool);
-  cdbus_m_opts_get_do(track_leader, cdbus_reply_bool);
+  cdbus_m_opts_get_do(track_focus, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(track_wdata, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(track_leader, cdbus_reply_variant_bool);
 #undef cdbus_m_opts_get_do
 
   printf_errf("(): " CDBUS_ERROR_BADTGT_S, target);
@@ -1254,6 +1254,7 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "    </method>\n"
     "    <method name='opts_get'>\n"
     "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='out' type='v' />\n"
     "    </method>\n"
     "    <method name='opts_set'>\n"
     "      <arg name='target' direction='in' type='s' />\n"
