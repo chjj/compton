@@ -282,6 +282,10 @@ cdbus_reply_variant_enum(session_t *ps, DBusMessage *srcmsg, cdbus_enum_t eval) 
 static bool
 cdbus_msg_get_arg(DBusMessage *msg, int count, const int type, void *pdest);
 
+static bool
+cdbus_msg_get_variant_arg(DBusMessage *msg, int count, const int type,
+      void *pdest);
+
 /**
  * Return a string representation of a D-Bus message type.
  */

@@ -608,6 +608,48 @@ cdbus_msg_get_arg(DBusMessage *msg, int count, const int type, void *pdest) {
   return true;
 }
 
+/**
+ * Get n-th argument of a D-Bus message as an unpacked variant.
+ *
+ * @param count the position of the argument to get, starting from 0
+ * @param type libdbus type number of the type
+ * @param pdest pointer to the target
+ * @return true if successful, false otherwise.
+ */
+static bool
+cdbus_msg_get_variant_arg(DBusMessage *msg, int count, const int type,
+      void *pdest) {
+  assert(count >= 0);
+
+  DBusMessageIter iter = { };
+  if (!dbus_message_iter_init(msg, &iter)) {
+    printf_errf("(): Message has no argument.");
+    return false;
+  }
+
+  {
+    const int oldcount = count;
+    while (count) {
+      if (!dbus_message_iter_next(&iter)) {
+        printf_errf("(): Failed to find argument %d.", oldcount);
+        return false;
+      }
+      --count;
+    }
+  }
+
+  if (DBUS_TYPE_VARIANT != dbus_message_iter_get_arg_type(&iter)) {
+    printf_errf("(): Argument has incorrect type.");
+    return false;
+  }
+
+  DBusMessageIter subiter;
+  dbus_message_iter_recurse(&iter, &subiter);
+  dbus_message_iter_get_basic(&subiter, pdest);
+
+  return true;
+}
+
 void
 cdbus_loop(session_t *ps) {
   dbus_connection_read_write(ps->dbus_conn, 0);
@@ -1072,7 +1114,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
 #define cdbus_m_opts_set_do(tgt, type, real_type) \
   if (!strcmp(MSTR(tgt), target)) { \
     real_type val; \
-    if (!cdbus_msg_get_arg(msg, 1, type, &val)) \
+    if (!cdbus_msg_get_variant_arg(msg, 1, type, &val)) \
       return false; \
     ps->o.tgt = val; \
     goto cdbus_process_opts_set_success; \
@@ -1081,7 +1123,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // fade_delta
   if (!strcmp("fade_delta", target)) {
     int32_t val = 0.0;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_INT32, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_INT32, &val))
       return false;
     ps->o.fade_delta = max_i(val, 1);
     goto cdbus_process_opts_set_success;
@@ -1090,7 +1132,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // fade_in_step
   if (!strcmp("fade_in_step", target)) {
     double val = 0.0;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
       return false;
     ps->o.fade_in_step = normalize_d(val) * OPAQUE;
     goto cdbus_process_opts_set_success;
@@ -1099,7 +1141,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // fade_out_step
   if (!strcmp("fade_out_step", target)) {
     double val = 0.0;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
       return false;
     ps->o.fade_out_step = normalize_d(val) * OPAQUE;
     goto cdbus_process_opts_set_success;
@@ -1108,7 +1150,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // no_fading_openclose
   if (!strcmp("no_fading_openclose", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     opts_set_no_fading_openclose(ps, val);
     goto cdbus_process_opts_set_success;
@@ -1117,7 +1159,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // unredir_if_possible
   if (!strcmp("unredir_if_possible", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     if (ps->o.unredir_if_possible != val) {
       ps->o.unredir_if_possible = val;
@@ -1129,7 +1171,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // clear_shadow
   if (!strcmp("clear_shadow", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     if (ps->o.clear_shadow != val) {
       ps->o.clear_shadow = val;
@@ -1141,7 +1183,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // track_focus
   if (!strcmp("track_focus", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     // You could enable this option, but never turn if off
     if (val) {
@@ -1153,7 +1195,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // vsync
   if (!strcmp("vsync", target)) {
     const char * val = NULL;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_STRING, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_STRING, &val))
       return false;
     vsync_deinit(ps);
     if (!parse_vsync(ps, val)) {
@@ -1172,7 +1214,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // redirected_force
   if (!strcmp("redirected_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 1, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, CDBUS_TYPE_ENUM, &val))
       return false;
     ps->o.redirected_force = val;
     force_repaint(ps);
@@ -1258,6 +1300,7 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "    </method>\n"
     "    <method name='opts_set'>\n"
     "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='in' type='v' />\n"
     "    </method>\n"
     "  </interface>\n"
     "</node>\n";
