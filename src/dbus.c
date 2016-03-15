@@ -1186,7 +1186,17 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "  </interface>\n"
     "</node>\n";
 
-  cdbus_reply_string(ps, msg, str_introspect);
+  const static char *str_root_introspect =
+    "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n"
+    " \"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
+    "<node>\n"
+    "  <node name='" CDBUS_OBJECT_RELNAME "'/>\n"
+    "</node>\n";
+
+  if (!strcmp(dbus_message_get_path(msg), "/"))
+    cdbus_reply_string(ps, msg, str_root_introspect);
+  else
+    cdbus_reply_string(ps, msg, str_introspect);
 
   return true;
 }

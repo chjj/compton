@@ -15,7 +15,8 @@
 
 #define CDBUS_SERVICE_NAME      "com.github.chjj.compton"
 #define CDBUS_INTERFACE_NAME    CDBUS_SERVICE_NAME
-#define CDBUS_OBJECT_NAME       "/com/github/chjj/compton"
+#define CDBUS_OBJECT_RELNAME    "com/github/chjj/compton"
+#define CDBUS_OBJECT_NAME       "/" CDBUS_OBJECT_RELNAME
 #define CDBUS_ERROR_PREFIX      CDBUS_INTERFACE_NAME ".error"
 #define CDBUS_ERROR_UNKNOWN     CDBUS_ERROR_PREFIX ".unknown"
 #define CDBUS_ERROR_UNKNOWN_S   "Well, I don't know what happened. Do you?"
