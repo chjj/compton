@@ -1290,6 +1290,7 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "      <arg name='wid' direction='in' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"
     "      <arg name='target' direction='in' type='s' />\n"
     "      <arg name='value' direction='in' type='v' />\n"
+    "      <arg name='success' direction='out' type='b' />\n"
     "    </method>\n"
     "    <method name='find_win'>\n"
     "      <arg name='target' direction='in' type='s' />\n"
@@ -1302,6 +1303,7 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "    <method name='opts_set'>\n"
     "      <arg name='target' direction='in' type='s' />\n"
     "      <arg name='value' direction='in' type='v' />\n"
+    "      <arg name='success' direction='out' type='b' />\n"
     "    </method>\n"
     "  </interface>\n"
     "</node>\n";
