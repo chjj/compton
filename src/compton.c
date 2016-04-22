@@ -5055,13 +5055,13 @@ fork_after(session_t *ps) {
   if (getppid() == 1)
     return true;
 
-#ifdef CONFIG_VSYNC_OPENGL
+/*#ifdef CONFIG_VSYNC_OPENGL
   // GLX context must be released and reattached on fork
   if (glx_has_context(ps) && !glXMakeCurrent(ps->dpy, None, NULL)) {
     printf_errf("(): Failed to detach GLx context.");
     return false;
   }
-#endif
+#endif*/
 
   int pid = fork();
 
@@ -5074,13 +5074,13 @@ fork_after(session_t *ps) {
 
   setsid();
 
-#ifdef CONFIG_VSYNC_OPENGL
+/*#ifdef CONFIG_VSYNC_OPENGL
   if (glx_has_context(ps)
       && !glXMakeCurrent(ps->dpy, get_tgt_window(ps), ps->psglx->context)) {
     printf_errf("(): Failed to make GLX context current.");
     return false;
   }
-#endif
+#endif*/
 
   // Mainly to suppress the _FORTIFY_SOURCE warning
   bool success = freopen("/dev/null", "r", stdin);
@@ -7442,6 +7442,20 @@ session_init(session_t *ps_old, int argc, char **argv) {
 
   rebuild_screen_reg(ps);
 
+  // Fork to background, if asked
+  if (ps->o.fork_after_register) {
+    if (!fork_after(ps)) {
+      session_destroy(ps);
+      return NULL;
+    }
+  }
+
+  // Redirect output stream
+  if (ps->o.fork_after_register || ps->o.logpath)
+    ostream_reopen(ps, NULL);
+
+  write_pid(ps);
+
   // Overlay must be initialized before double buffer, and before creation
   // of OpenGL context.
   if (ps->o.paint_on_overlay)
@@ -7582,20 +7596,6 @@ session_init(session_t *ps_old, int argc, char **argv) {
     printf_errfq(1, "(): DBus support not compiled in!");
 #endif
   }
-
-  // Fork to background, if asked
-  if (ps->o.fork_after_register) {
-    if (!fork_after(ps)) {
-      session_destroy(ps);
-      return NULL;
-    }
-  }
-
-  // Redirect output stream
-  if (ps->o.fork_after_register || ps->o.logpath)
-    ostream_reopen(ps, NULL);
-
-  write_pid(ps);
 
   // Free the old session
   if (ps_old)
