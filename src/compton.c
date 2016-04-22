@@ -6216,7 +6216,11 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
   // Other variables determined by options
 
   // Determine whether we need to track focus changes
-  if (ps->o.inactive_opacity || ps->o.active_opacity || ps->o.inactive_dim) {
+  if (ps->o.inactive_opacity || ps->o.active_opacity || ps->o.inactive_dim
+  || (ps->o.shadow_radius != ps->o.shadow_inactive_radius)
+  || (ps->o.shadow_opacity != ps->o.shadow_inactive_opacity)
+  || (ps->o.shadow_offset_x != ps->o.shadow_inactive_offset_x)
+  || (ps->o.shadow_offset_y != ps->o.shadow_inactive_offset_y)) {
     ps->o.track_focus = true;
   }
 
