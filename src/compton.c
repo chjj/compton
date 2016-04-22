@@ -163,6 +163,39 @@ set_fade_callback(session_t *ps, win *w,
   }
 }
 
+// === Dimming ===
+
+/**
+ * Run dimming on a window.
+ *
+ * @param steps steps of dimming
+ */
+static void
+run_dim(session_t *ps, win *w, unsigned steps) {
+  // If dim has reached target opacity, return
+  if (!ps->o.inactive_dim_fading || w->dim_opacity == w->dim_opacity_tgt) {
+    return;
+  }
+
+  if (!ps->o.inactive_dim_fading)
+    w->dim_opacity = w->dim_opacity_tgt;
+  else if (steps) {
+    if (w->dim_opacity < w->dim_opacity_tgt)
+      w->dim_opacity = normalize_d_range(
+          w->dim_opacity + ps->o.inactive_dim_step * steps,
+          0.0, w->dim_opacity_tgt);
+    else
+      w->dim_opacity = normalize_d_range(
+          w->dim_opacity - ps->o.inactive_undim_step * steps,
+          w->dim_opacity_tgt, 1.0);
+  }
+  add_damage_win(ps, w);
+
+  if (w->dim_opacity != w->dim_opacity_tgt) {
+    ps->idling = false;
+  }
+}
+
 // === Shadows ===
 
 static double __attribute__((const))
@@ -181,6 +214,12 @@ make_gaussian_map(double r) {
   double g;
 
   c = malloc(sizeof(conv) + size * size * sizeof(double));
+
+  if (!c) {
+      printf_errf("(): Failed to allocate memory for gaussian map.");
+      exit(1);
+  }
+
   c->size = size;
   c->data = (double *) (c + 1);
   t = 0.0;
@@ -288,6 +327,11 @@ presum_gaussian(session_t *ps, conv *map, int *cgsize, unsigned char** shadow_co
 
   sc = *shadow_corner = malloc((*cgsize + 1) * (*cgsize + 1) * 26);
   st = *shadow_top = malloc((*cgsize + 1) * 26);
+
+  if (!sc || !st) {
+    printf_errf("(): Failed to allocate memory for shadow corners and sides.");
+    exit(1);
+  }
 
   for (x = 0; x <= *cgsize; x++) {
     st[25 * (*cgsize + 1) + x] =
@@ -1174,8 +1218,9 @@ paint_preprocess(session_t *ps, win *list) {
       calc_dim(ps, w);
     }
 
-    // Run fading
+    // Run fading and dimming
     run_fade(ps, w, steps);
+    run_dim(ps, w, steps);
 
     // Opacity will not change, from now on.
 
@@ -1763,8 +1808,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
     free_picture(ps, &pict);
 
   // Dimming the window if needed
-  if (w->dim) {
-    double dim_opacity = ps->o.inactive_dim;
+  if (w->dim || (ps->o.inactive_dim_fading && w->dim_opacity)) {
+    double dim_opacity = (ps->o.inactive_dim_fading) ? w->dim_opacity : ps->o.inactive_dim;
     if (!ps->o.inactive_dim_fixed)
       dim_opacity *= get_opacity_percent(w);
 
@@ -2490,7 +2535,10 @@ calc_dim(session_t *ps, win *w) {
     dim = false;
   }
 
-  if (dim != w->dim) {
+  if (ps->o.inactive_dim_fading) {
+    w->dim_opacity_tgt = dim ? ps->o.inactive_dim : 0.0;
+  }
+  else if (dim != w->dim) {
     w->dim = dim;
     add_damage_win(ps, w);
   }
@@ -3010,6 +3058,8 @@ add_win(session_t *ps, Window id, Window prev) {
     .prop_shadow = -1,
 
     .dim = false,
+    .dim_opacity = 0.0,
+    .dim_opacity_tgt = 0.0,
 
     .invert_color = false,
     .invert_color_force = UNSET,
@@ -4253,6 +4303,11 @@ ev_expose(session_t *ps, XExposeEvent *ev) {
       }
     }
 
+    if (!ps->expose_rects){
+      printf_errf("(): Failed to allocate memory for expose rects.");
+      exit(1);
+    }
+
     ps->expose_rects[ps->n_expose].x = ev->x;
     ps->expose_rects[ps->n_expose].y = ev->y;
     ps->expose_rects[ps->n_expose].width = ev->width;
@@ -5020,6 +5075,10 @@ register_cm(session_t *ps) {
     }
 
     char *buf = malloc(len);
+    if (!buf){
+      printf_errf("(): Failed to allocate memory for creating window.");
+      exit(1);
+    }
     snprintf(buf, len, REGISTER_PROP "%d", ps->scr);
     buf[len - 1] = '\0';
     XSetSelectionOwner(ps->dpy, get_atom(ps, buf), ps->reg_win, 0);
@@ -5299,7 +5358,7 @@ parse_conv_kern_lst(session_t *ps, const char *src, XFixed **dest, int max) {
       return false;
   }
 
-  if (*pc) {
+  if ((pc) && (*pc)) {
     printf_errf("(): Too many blur kernels!");
     return false;
   }
@@ -5719,6 +5778,12 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
     ps->o.unredir_if_possible_delay = ival;
   // --inactive-dim-fixed
   lcfg_lookup_bool(&cfg, "inactive-dim-fixed", &ps->o.inactive_dim_fixed);
+  // --inactive-dim-fading
+  lcfg_lookup_bool(&cfg, "inactive-dim-fading", &ps->o.inactive_dim_fading);
+  // --inactive-dim-step
+  config_lookup_float(&cfg, "inactive-dim-step", &ps->o.inactive_dim_step);
+  // --inactive-undim-step
+  config_lookup_float(&cfg, "inactive-undim-step", &ps->o.inactive_undim_step);
   // --detect-transient
   lcfg_lookup_bool(&cfg, "detect-transient", &ps->o.detect_transient);
   // --detect-client-leader
@@ -5884,6 +5949,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
+    { "inactive-dim-fading", no_argument, NULL, 321 },
+    { "inactive-dim-step", required_argument, NULL, 322 },
+    { "inactive-undim-step", required_argument, NULL, 323 },
     { "reredir-on-root-change", no_argument, NULL, 731 },
     { "glx-reinit-on-root-change", no_argument, NULL, 732 },
     // Must terminate with a NULL entry
@@ -5931,7 +5999,13 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     .menu_opacity = 1.0,
   };
   bool shadow_enable = false, fading_enable = false;
-  char *lc_numeric_old = mstrcpy(setlocale(LC_NUMERIC, NULL));
+
+  char *locale_old = setlocale(LC_NUMERIC, NULL);
+  if (!locale_old){
+    printf_errf("(): Failed to allocate memory for old locale.");
+    exit(1);
+  }
+  char *lc_numeric_old = mstrcpy(locale_old);
 
   for (i = 0; i < NUM_WINTYPES; ++i) {
     ps->o.wintype_fade[i] = false;
@@ -6155,6 +6229,13 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
         break;
       P_CASEBOOL(319, no_x_selection);
+      P_CASEBOOL(321, inactive_dim_fading);
+      case 322:
+        ps->o.inactive_dim_step = atof(optarg);
+        break;
+      case 323:
+        ps->o.inactive_undim_step = atof(optarg);
+        break;
       P_CASEBOOL(731, reredir_on_root_change);
       P_CASEBOOL(732, glx_reinit_on_root_change);
       default:
@@ -6639,6 +6720,11 @@ init_alpha_picts(session_t *ps) {
 
   ps->alpha_picts = malloc(sizeof(Picture) * num);
 
+  if (!ps->alpha_picts) {
+    printf_errf("(): Failed to allocate memory for alpha picts.");
+    exit(1);
+  }
+
   for (i = 0; i < num; ++i) {
     double o = i * ps->o.alpha_step;
     if ((1.0 - o) > ps->o.alpha_step)
@@ -7000,12 +7086,20 @@ mainloop(session_t *ps) {
     // Consider ev_received firstly
     if (ps->ev_received || ps->o.benchmark) {
       ptv = malloc(sizeof(struct timeval));
+      if (!ptv){
+        printf_errf("(): Failed to allocate memory for timout timeval.");
+        exit(1);
+      }
       ptv->tv_sec = 0L;
       ptv->tv_usec = 0L;
     }
     // Then consider fading timeout
     else if (!ps->idling) {
       ptv = malloc(sizeof(struct timeval));
+      if (!ptv){
+        printf_errf("(): Failed to allocate memory for timout timeval.");
+        exit(1);
+      }
       *ptv = ms_to_tv(fade_timeout(ps));
     }
 
@@ -7025,6 +7119,10 @@ mainloop(session_t *ps) {
     if (tmout_ms < TIME_MS_MAX) {
       if (!ptv) {
         ptv = malloc(sizeof(struct timeval));
+        if (!ptv){
+          printf_errf("(): Failed to allocate memory for timout timeval.");
+          exit(1);
+        }
         *ptv = ms_to_tv(tmout_ms);
       }
       else if (timeval_ms_cmp(ptv, tmout_ms) > 0) {
@@ -7173,6 +7271,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .blur_kerns = { NULL },
       .inactive_dim = 0.0,
       .inactive_dim_fixed = false,
+      .inactive_dim_fading = false,
+      .inactive_dim_step = 0.05,
+      .inactive_undim_step = 0.05,
       .invert_color_list = NULL,
       .opacity_rules = NULL,
 
@@ -7277,6 +7378,12 @@ session_init(session_t *ps_old, int argc, char **argv) {
 
   // Allocate a session and copy default values into it
   session_t *ps = malloc(sizeof(session_t));
+
+  if (!ps){
+    printf_errf("(): Failed to allocate memory for session.");
+    exit(1);
+  }
+
   memcpy(ps, &s_def, sizeof(session_t));
   ps_g = ps;
   ps->ignore_tail = &ps->ignore_head;
