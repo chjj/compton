@@ -538,6 +538,24 @@ struct _timeout_t;
 
 struct _win;
 
+typedef struct _c2_b c2_b_t;
+typedef struct _c2_l c2_l_t;
+
+/// Pointer to a condition tree.
+typedef struct {
+  bool isbranch : 1;
+  union {
+    c2_b_t *b;
+    c2_l_t *l;
+  };
+} c2_ptr_t;
+
+/// Linked list type of conditions.
+struct _c2_lptr {
+  c2_ptr_t ptr;
+  void *data;
+  struct _c2_lptr *next;
+};
 typedef struct _c2_lptr c2_lptr_t;
 
 /// Structure representing all options.
@@ -718,6 +736,8 @@ typedef struct _options_t {
   c2_lptr_t *invert_color_list;
   /// Rules to change window opacity.
   c2_lptr_t *opacity_rules;
+  /// Rules to change window dim.
+  c2_lptr_t *dim_rules;
 
   // === Focus related ===
   /// Consider windows of specific types to be always focused.
@@ -1154,6 +1174,7 @@ typedef struct _win {
   const c2_lptr_t *cache_ivclst;
   const c2_lptr_t *cache_bbblst;
   const c2_lptr_t *cache_oparule;
+  const c2_lptr_t *cache_dimrule;
   const c2_lptr_t *cache_pblst;
   const c2_lptr_t *cache_uipblst;
 
@@ -1214,6 +1235,7 @@ typedef struct _win {
   // Dim-related members
   /// Whether the window is to be dimmed.
   bool dim;
+  double permanent_dim;
 
   /// Whether to invert window color.
   bool invert_color;
@@ -1351,7 +1373,7 @@ allocchk_(const char *func_name, void *ptr) {
 /// @brief Wrapper of calloc().
 #define ccalloc(nmemb, type) ((type *) allocchk(calloc((nmemb), sizeof(type))))
 
-/// @brief Wrapper of ealloc().
+/// @brief Wrapper of realloc().
 #define crealloc(ptr, nmemb, type) ((type *) allocchk(realloc((ptr), (nmemb) * sizeof(type))))
 
 /// @brief Zero out the given memory block.
@@ -1361,6 +1383,17 @@ allocchk_(const char *func_name, void *ptr) {
 ///        convenience.
 #define cmemzero_one(ptr) cmemzero((ptr), sizeof(*(ptr)))
 
+/// @brief Wrapper of vasprintf().
+#define cvasprintf(strp, fmt, args) do { \
+    if (vasprintf((strp), (fmt), (args)) == -1) \
+      allocchk(NULL); \
+} while(0)
+
+/// @brief Wrapper of asprintf().
+#define casprintf(strp, fmt, ...) do { \
+    if (asprintf((strp), (fmt), ## __VA_ARGS__) == -1) \
+      allocchk(NULL); \
+} while(0)
 /**
  * Return whether a struct timeval value is empty.
  */
@@ -2475,10 +2508,23 @@ void
 win_set_invert_color_force(session_t *ps, win *w, switch_t val);
 
 void
+win_set_permanent_dim_force(session_t *ps, win *w, double val);
+
+void
 opts_init_track_focus(session_t *ps);
 
 void
 opts_set_no_fading_openclose(session_t *ps, bool newval);
+
+bool
+parse_rule_dim(session_t *ps, c2_lptr_t **dim_rules, const char *src);
+
+void
+win_update_dim_rule(session_t *ps, win *w);
+
+void
+win_recheck_client(session_t *ps, win *w);
+
 //!@}
 #endif
 
@@ -2493,6 +2539,20 @@ c2_parsed(session_t *ps, c2_lptr_t **pcondlst, const char *pattern,
 
 #define c2_parse(ps, pcondlst, pattern) c2_parsed((ps), (pcondlst), (pattern), NULL)
 
+bool
+c2_remove_reprd(c2_lptr_t **pcondlst, const char *tgt_rule, \
+                const char *data_fmt);
+
+#define c2_remove_repr(pcondlst, tgt_rule, data_fmt) \
+    c2_remove_reprd((pcondlst), (tgt_rule), NULL)
+
+bool
+c2_replace_reprd(session_t *ps, c2_lptr_t **pcondlst, const char *tgt_rule, \
+                c2_lptr_t *new_rule_l, const char *data_fmt);
+
+#define c2_replace_repr(ps, pcondlst, tgt_rule, new_rule, data_fmt) \
+    c2_replace_reprd((ps), (pcondlst), (tgt_rule), (new_rule), NULL)
+
 c2_lptr_t *
 c2_free_lptr(c2_lptr_t *lp);
 
@@ -2502,6 +2562,16 @@ c2_matchd(session_t *ps, win *w, const c2_lptr_t *condlst,
 
 #define c2_match(ps, w, condlst, cache) c2_matchd((ps), (w), (condlst), \
     (cache), NULL)
+
+char *
+c2_dump_str(c2_ptr_t p) __attribute__ ((warn_unused_result));
+
+char *
+c2_dump_strd(c2_lptr_t *l, const char *data_fmt) __attribute__ ((warn_unused_result));
+
+char *
+c2_dump_str_data(c2_lptr_t *l, const char *data_fmt) __attribute__ ((warn_unused_result));
+
 #endif
 
 ///@}
@@ -2561,6 +2631,27 @@ hexdump(const char *data, int len) {
     putchar('\n');
 
   fflush(stdout);
+}
+
+/**
+ * @brief Concatenate a formatted string to another.
+ *
+ * @param buf pointer to buffer
+ * @param fmt format string
+ */
+static inline void
+mstrextendf(char **dest, const char *fmt, ...) {
+    char *str = NULL;
+    va_list args;
+
+    // Format into str
+    va_start(args, fmt);
+    cvasprintf(&str, fmt, args);
+    va_end(args);
+
+    // Concatenate
+    mstrextend(dest, str);
+    free(str);
 }
 
 #endif

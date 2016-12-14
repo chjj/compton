@@ -384,6 +384,45 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
 ///@}
 
 /**
+ * Callback to append rules to a message.
+ */
+static bool
+cdbus_apdarg_dim_rules(session_t *ps, DBusMessage *msg, const void *data) {
+  cdbus_string_t *arr = NULL;
+  size_t count = 0;
+  const char *data_fmt ="%ld";
+  bool success = true;
+
+  // Build the array
+  for (c2_lptr_t *rule = ps->o.dim_rules; rule; rule = rule->next) {
+    arr = crealloc(arr, ++count, cdbus_string_t);
+    arr[count - 1] = c2_dump_strd(rule, data_fmt);
+  }
+
+  // Append arguments
+  if (!dbus_message_append_args(msg, DBUS_TYPE_ARRAY, CDBUS_TYPE_STRING,
+        &arr, count, DBUS_TYPE_INVALID)) {
+    printf_errf("(): Failed to append argument.");
+    goto error;
+  }
+
+  goto end;
+
+error:
+  success = false;
+  goto end;
+
+end:
+  while(count)
+    free(arr[--count]);
+  free(arr);
+  return success;
+
+}
+///@}
+
+
+/**
  * Send a D-Bus signal.
  *
  * @param ps current session
@@ -586,6 +625,9 @@ cdbus_process(session_t *ps, DBusMessage *msg) {
   else if (cdbus_m_ismethod("opts_set")) {
     success = cdbus_process_opts_set(ps, msg);
   }
+  else if (cdbus_m_ismethod("dim_rule_update")) {
+    success = cdbus_process_dim_rule_update(ps, msg);
+  }
 #undef cdbus_m_ismethod
   else if (dbus_message_is_method_call(msg,
         "org.freedesktop.DBus.Introspectable", "Introspect")) {
@@ -636,6 +678,16 @@ cdbus_process(session_t *ps, DBusMessage *msg) {
 
   // Free the message
   dbus_message_unref(msg);
+}
+
+/**
+ * Process a list_win D-Bus request.
+ */
+static bool
+cdbus_process_list_dim_rule(session_t *ps, DBusMessage *msg) {
+  cdbus_reply(ps, msg, cdbus_apdarg_dim_rules, NULL);
+
+  return true;
 }
 
 /**
@@ -721,6 +773,8 @@ cdbus_process_win_get(session_t *ps, DBusMessage *msg) {
   cdbus_m_win_get_do(opacity_prop, cdbus_reply_uint32);
   cdbus_m_win_get_do(opacity_prop_client, cdbus_reply_uint32);
   cdbus_m_win_get_do(opacity_set, cdbus_reply_uint32);
+
+  cdbus_m_win_get_do(permanent_dim, cdbus_reply_double);
 
   cdbus_m_win_get_do(frame_opacity, cdbus_reply_double);
   if (!strcmp("left_width", target)) {
@@ -819,6 +873,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
     win_set_invert_color_force(ps, w, val);
     goto cdbus_process_win_set_success;
   }
+
 #undef cdbus_m_win_set_do
 
   printf_errf("(): " CDBUS_ERROR_BADTGT_S, target);
@@ -937,6 +992,9 @@ cdbus_process_opts_get(session_t *ps, DBusMessage *msg) {
     cdbus_reply_string(ps, msg, BACKEND_STRS[ps->o.backend]);
     return true;
   }
+  if (!strcmp("dim-rule", target)) {
+    return cdbus_process_list_dim_rule(ps, msg);
+  }
   cdbus_m_opts_get_do(dbe, cdbus_reply_bool);
   cdbus_m_opts_get_do(vsync_aggressive, cdbus_reply_bool);
 
@@ -983,6 +1041,109 @@ cdbus_process_opts_get(session_t *ps, DBusMessage *msg) {
   cdbus_reply_err(ps, msg, CDBUS_ERROR_BADTGT, CDBUS_ERROR_BADTGT_S, target);
 
   return true;
+}
+
+static bool
+cdbus_process_dim_rule_update(session_t *ps, DBusMessage *msg) {
+  char *action = NULL;
+  char *tgt_rule = NULL;
+  char *new_rule = NULL;
+  const char *data_fmt = "%ld";
+  bool track_wdata = ps->o.track_wdata;
+
+  if (!cdbus_msg_get_arg(msg, 0, DBUS_TYPE_STRING, &action)) {
+    cdbus_reply_err(ps, msg, CDBUS_ERROR_BADARG, CDBUS_ERROR_BADARG_S, 0, \
+                    "You need to provide an action to perform.");
+    return false;
+  }
+
+#define cdbus_m_rule_get(arg_id, rule) ({ \
+  bool ret = cdbus_msg_get_arg(msg, (arg_id), DBUS_TYPE_STRING, rule); \
+  if (!ret) \
+      cdbus_reply_err(ps, msg, CDBUS_ERROR_BADARG, CDBUS_ERROR_BADARG_S, \
+                      (arg_id), "Must be a single rule in string format."); \
+  ret; })
+
+#define cdbus_m_rule_parse(arg_id, rule, dest) ({ \
+  bool ret = parse_rule_dim(ps, (dest), (rule)); \
+  if (!ret) \
+    cdbus_reply_err(ps, msg, CDBUS_ERROR_BADARG, CDBUS_ERROR_BADARG_S, \
+                    (arg_id), "Failed to parse rule. See compton output."); \
+  ret; })
+
+#define cdbus_m_rule_remove(arg_id, dest, tgt_rule) ({ \
+  bool ret = c2_remove_reprd((dest), (tgt_rule), data_fmt); \
+  if (!ret) \
+    cdbus_reply_err(ps, msg, CDBUS_ERROR_MISRUL, CDBUS_ERROR_MISRUL_S, \
+                    (arg_id), tgt_rule); \
+  ret; })
+
+#define cdbus_m_rule_replace(arg_id, tgt_rule, new_rule_l) ({ \
+  bool ret = c2_replace_reprd(ps, &ps->o.dim_rules, (tgt_rule), \
+                              (new_rule_l), data_fmt); \
+  if (!ret) \
+    cdbus_reply_err(ps, msg, CDBUS_ERROR_MISRUL, CDBUS_ERROR_MISRUL_S, \
+                    (arg_id), (tgt_rule)); \
+  ret; })
+
+  if (!strcmp("insert", action)) {
+    if (!cdbus_m_rule_get(1, &new_rule) || \
+        !cdbus_m_rule_parse(1, new_rule, &ps->o.dim_rules))
+      return false;
+  }
+  else if (!strcmp("remove", action)) {
+    if (!cdbus_m_rule_get(1, &tgt_rule) || \
+        !cdbus_m_rule_remove(1, &ps->o.dim_rules, tgt_rule))
+      return false;
+  }
+  else if (!strcmp("replace", action)) {
+    bool success = true;
+    c2_lptr_t *new_rule_l = NULL;
+    if (!cdbus_m_rule_get(1, &tgt_rule) || \
+        !cdbus_m_rule_get(2, &new_rule) || \
+        !cdbus_m_rule_parse(2, new_rule, &new_rule_l) || \
+        !cdbus_m_rule_replace(2, tgt_rule, new_rule_l))
+      success = false;
+    if (new_rule_l)
+      c2_free_lptr(new_rule_l);
+    return success;
+  }
+  else {
+    cdbus_reply_err(ps, msg, CDBUS_ERROR_BADARG, CDBUS_ERROR_BADARG_S, 1, \
+                    "Unsupported action. Use one of [ insert | replace | remove ].");
+    return false;
+  }
+
+  // Flush cache and update dim rules on windows.
+  for (win *w = ps->list; w; w = w->next) {
+    // If wdata tracking was enabled by `parse_rule_dim` just now it means
+    // that the rules require wdata. Therefore we must recheck all the added
+    // clients so that this data is available to `win_update_dim_rule`.
+    if (!track_wdata && ps->o.track_wdata) {
+      win_recheck_client(ps, w);
+    }
+    w->cache_dimrule = NULL;
+    win_update_dim_rule(ps, w);
+  }
+
+  // Reply with a newly inserted/updated rule so that user can reference it.
+  if (!dbus_message_get_no_reply(msg)) {
+    if (new_rule) {
+      char *rule_repr = c2_dump_strd(ps->o.dim_rules, data_fmt);
+      cdbus_reply_string(ps, msg, rule_repr);
+      free(rule_repr);
+    }
+    else {
+      cdbus_reply_bool(ps, msg, true);
+    }
+  }
+
+  return true;
+
+#undef cdbus_m_rule_get
+#undef cdbus_m_rule_parse
+#undef cdbus_m_rule_remove
+#undef cdbus_m_rule_replace
 }
 
 /**
