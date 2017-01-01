@@ -172,6 +172,8 @@ uninstall:
 	@rm -f "$(DESTDIR)$(BINDIR)/compton" "$(DESTDIR)$(BINDIR)/compton-trans"
 	@rm -f $(addprefix "$(DESTDIR)$(MANDIR)"/, compton.1 compton-trans.1)
 	@rm -f "$(DESTDIR)$(APPDIR)/compton.desktop"
+	@rm -f "$(DESTDIR)$(ICODIR)/scalable/apps/compton.svg"
+	@rm -f "$(DESTDIR)$(ICODIR)/48x48/apps/compton.png"
 ifneq "$(DOCDIR)" ""
 	@rm -f $(addprefix "$(DESTDIR)$(DOCDIR)"/, README.md compton.sample.conf cdbus-driver.sh)
 endif
