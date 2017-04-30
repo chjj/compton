@@ -10,8 +10,8 @@ APPDIR ?= $(PREFIX)/share/applications
 ICODIR ?= $(PREFIX)/share/icons/hicolor/
 
 PACKAGES = x11 xcomposite xfixes xdamage xrender xext xrandr
-LIBS = -lm -lrt
-INCS =
+LIBS = -lm -lrt $(shell pkg-config --libs gtk+-3.0)
+INCS = $(shell pkg-config --cflags gtk+-3.0)
 
 OBJS = compton.o
 

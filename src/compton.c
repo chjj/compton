@@ -11,6 +11,10 @@
 #include "compton.h"
 #include <ctype.h>
 
+// Hack: Automatically fetch the normal background and menu background colors
+#include <gtk-3.0/gtk/gtk.h>
+#include <gtk-3.0/gdk/gdk.h>
+
 // === Global constants ===
 
 /// Name strings for window types.
@@ -1435,7 +1439,7 @@ win_blur_background(session_t *ps, win *w, Picture tgt_buffer,
   const int wid = w->widthb;
   const int hei = w->heightb;
 
-  double factor_center = 1.0;
+  double factor_center = 0.0;
   // Adjust blur strength according to window opacity, to make it appear
   // better during fading
   if (!ps->o.blur_background_fixed) {
@@ -5753,6 +5757,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "no-fading-destroyed-argb", no_argument, NULL, 315 },
     { "force-win-blend", no_argument, NULL, 316 },
     { "glx-fshader-win", required_argument, NULL, 317 },
+	{ "tommy-flag", no_argument, NULL, 321 },
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
@@ -6023,6 +6028,66 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(313, xrender_sync_fence);
       P_CASEBOOL(315, no_fading_destroyed_argb);
       P_CASEBOOL(316, force_win_blend);
+	  case 321: {
+        ps->o.tommy_flag = true;
+		gtk_init(NULL, NULL);
+		GdkRGBA bg_color_win, bg_color_menu;
+		GtkWidget* win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+		GtkStyleContext* ctxt = gtk_widget_get_style_context(win);
+		gtk_style_context_get_background_color(ctxt, GTK_STATE_FLAG_NORMAL, &bg_color_win);
+		gtk_widget_destroy(win);
+		GtkWidget* menu = gtk_menu_new();
+		ctxt = gtk_widget_get_style_context(menu);
+		gtk_style_context_get_background_color(ctxt, GTK_STATE_FLAG_NORMAL, &bg_color_menu);
+		gtk_widget_destroy(menu);
+		printf("I have got some colors from GTK! (%g,%g,%g) and (%g,%g,%g)\n",
+			bg_color_win.red, bg_color_win.green, bg_color_win.blue,
+			bg_color_menu.red,bg_color_menu.green,bg_color_menu.blue);
+		const int N = 2;
+		double x[2][3] = { { 0.807, 0.807, 0.807 }, { 0.953, 0.953, 0.953 } };
+		x[0][0] = bg_color_win.red; x[0][1] = bg_color_win.green; x[0][2] = bg_color_win.blue;
+		x[1][0] = bg_color_menu.red;x[1][1] = bg_color_menu.green;x[1][2] = bg_color_menu.blue;
+	    const char* part1 = 
+			"uniform float opacity;\n"
+			"uniform bool invert_color;\n"
+			"uniform sampler2D tex;\n"
+			"void main() {\n"
+			"  vec4 c = texture2D(tex, vec2(gl_TexCoord[0].x, gl_TexCoord[0].y));\n"
+			"  float eps = 0.018f;\n"
+			"  float eps1 = 0.0f;\n"
+			"  if (invert_color)\n"
+			" 	 c = vec4(vec3(c.a, c.a, c.a) - vec3(c), c.a);\n"
+			"  if(";
+
+		char tmp[200], conditions[2000];
+		int offset = 0;
+	  	for(int n=0; n<N; n++) {
+			double red = x[n][0], green = x[n][1], blue = x[n][2];
+			sprintf(tmp, "  (c.r > %g+eps1-eps && c.r < %g+eps1+eps &&\n"
+				"   c.g > %g+eps1-eps && c.g < %g+eps1+eps &&\n"
+				"   c.b > %g+eps1-eps && c.b < %g+eps1+eps)",
+				red, red, green, green, blue, blue);
+			if (n < N-1) {
+				unsigned l = strlen(tmp);
+				sprintf(tmp+l, " ||\n");
+			}
+			
+			sprintf(conditions + offset, "%s", tmp);
+			offset += strlen(tmp);
+		}
+
+	    const char* part2 = 
+			"  ) { c *= opacity; } \n"
+			"  else {  }\n"
+			"  gl_FragColor = c;\n"
+		    "}\n";
+
+		char* big = (char*)malloc(10000);
+		sprintf(big, "%s\n%s\n%s", part1, conditions, part2);
+		ps->o.glx_fshader_win_str = mstrcpy(big);
+		free(big);
+	    break;
+	  }
       case 317:
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
         break;
