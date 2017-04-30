@@ -7166,7 +7166,26 @@ session_init(session_t *ps_old, int argc, char **argv) {
     XSynchronize(ps->dpy, 1);
   }
 
-  ps->scr = DefaultScreen(ps->dpy);
+  if(!ps->o.display){
+    int scr_cnt = XScreenCount(ps->dpy);
+    for(;--scr_cnt;){
+        if(!fork()) break;
+    }
+    ps->scr = scr_cnt;
+
+    char dpy_buf [] = ":0.0";
+    dpy_buf[3] = '0'+ps->scr;
+    fprintf(stderr,"Setting display %s\n",dpy_buf);
+    ps->dpy = XOpenDisplay(dpy_buf);
+
+    if (!ps->dpy) {
+      fprintf(stderr, "Can't open display\n");
+      exit(1);
+    }
+  }else{
+    ps->scr = DefaultScreen(ps->dpy);
+  }
+
   ps->root = RootWindow(ps->dpy, ps->scr);
 
   ps->vis = DefaultVisual(ps->dpy, ps->scr);
