@@ -414,10 +414,10 @@ sum_gaussian(conv *map, double opacity,
              int x, int y, int width, int height);
 
 static void
-presum_gaussian(session_t *ps, conv *map);
+presum_gaussian(session_t *ps, conv *map, int *cgsize, unsigned char** shadow_corner, unsigned char** shadow_top);
 
 static XImage *
-make_shadow(session_t *ps, double opacity, int width, int height);
+make_shadow(session_t *ps, win *w, double opacity, int width, int height);
 
 static bool
 win_build_shadow(session_t *ps, win *w, double opacity);

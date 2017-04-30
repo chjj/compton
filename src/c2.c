@@ -573,6 +573,10 @@ c2_parse_pattern(session_t *ps, const char *pattern, int offset, c2_ptr_t *presu
     // to the end of the pattern string -- currently escape sequences
     // cannot be converted to a string longer than itself.
     char *tptnstr = malloc((strlen(pattern + offset) + 1) * sizeof(char));
+    if (!tptnstr){
+      printf_errf("(): Failed to allocate memory for pattern string.");
+      exit(1);
+    }
     char *ptptnstr = tptnstr;
     pleaf->ptnstr = tptnstr;
     for (; pattern[offset] && delim != pattern[offset]; ++offset) {
@@ -940,7 +944,10 @@ c2_dump_raw(c2_ptr_t p) {
         putchar('@');
       if (pleaf->index >= 0)
         printf("[%d]", pleaf->index);
-      printf(":%d%s", pleaf->format, c2h_dump_str_type(pleaf));
+      char* type = c2h_dump_str_type(pleaf);
+      if (type) {
+        printf(":%d%s", pleaf->format, type);
+      }
     }
 
     // Print operator

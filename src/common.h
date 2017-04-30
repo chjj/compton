@@ -239,6 +239,8 @@
 #define WFLAG_POS_CHANGE    0x0002
 // Window opacity / dim state changed
 #define WFLAG_OPCT_CHANGE   0x0004
+// Window focused state is changed
+#define WFLAG_FOCUS_CHANGE  0x0008
 
 // === Types ===
 
@@ -644,9 +646,13 @@ typedef struct _options_t {
   bool wintype_shadow[NUM_WINTYPES];
   /// Red, green and blue tone of the shadow.
   double shadow_red, shadow_green, shadow_blue;
-  int shadow_radius;
-  int shadow_offset_x, shadow_offset_y;
-  double shadow_opacity;
+  int shadow_radius, shadow_inactive_radius, shadow_menu_radius;
+  int shadow_offset_x, shadow_offset_y, shadow_inactive_offset_x, shadow_inactive_offset_y, shadow_menu_offset_x, shadow_menu_offset_y;
+  double shadow_opacity, shadow_inactive_opacity, shadow_menu_opacity;
+
+  int frame_border_crop;
+  double frame_border_opacity;
+
   bool clear_shadow;
   /// Geometry of a region in which shadow is not painted on.
   geometry_t shadow_exclude_reg_geom;
@@ -714,6 +720,12 @@ typedef struct _options_t {
   /// Whether to use fixed inactive dim opacity, instead of deciding
   /// based on window opacity.
   bool inactive_dim_fixed;
+  /// Whether to dim inactive windows gradually
+  bool inactive_dim_fading;
+  /// How much to fade in a single dimming step
+  double inactive_dim_step;
+  /// How much to fade in a single undimming step
+  double inactive_undim_step;
   /// Conditions of windows to have inverted colors.
   c2_lptr_t *invert_color_list;
   /// Rules to change window opacity.
@@ -924,14 +936,14 @@ typedef struct _session_t {
   /// 1x1 white Picture.
   Picture white_picture;
   /// Gaussian map of shadow.
-  conv *gaussian_map;
+  conv *gaussian_map, *gaussian_map_inactive, *gaussian_map_menu;
   // for shadow precomputation
   /// Shadow depth on one side.
-  int cgsize;
+  int cgsize, cgsize_inactive, cgsize_menu;
   /// Pre-computed color table for corners of shadow.
-  unsigned char *shadow_corner;
+  unsigned char *shadow_corner, *shadow_corner_inactive, *shadow_corner_menu;
   /// Pre-computed color table for a side of shadow.
-  unsigned char *shadow_top;
+  unsigned char *shadow_top, *shadow_top_inactive, *shadow_top_menu;
   /// A region in which shadow is not painted on.
   XserverRegion shadow_exclude_reg;
 
@@ -1088,6 +1100,7 @@ typedef struct _win {
   paint_t paint;
   /// Bounding shape of the window.
   XserverRegion border_size;
+  XserverRegion shadow_border_size;
   /// Region of the whole window, shadow region included.
   XserverRegion extents;
   /// Window flags. Definitions above.
@@ -1185,6 +1198,7 @@ typedef struct _win {
   // Frame-opacity-related members
   /// Current window frame opacity. Affected by window opacity.
   double frame_opacity;
+  double frame_border_opacity;
   /// Frame extents. Acquired from _NET_FRAME_EXTENTS.
   margin_t frame_extents;
 
@@ -1214,6 +1228,10 @@ typedef struct _win {
   // Dim-related members
   /// Whether the window is to be dimmed.
   bool dim;
+  /// Current dim opacity.
+  double dim_opacity;
+  /// Target dim opacity.
+  double dim_opacity_tgt;
 
   /// Whether to invert window color.
   bool invert_color;
@@ -1816,11 +1834,11 @@ fds_drop(session_t *ps, int fd, short events) {
   fd_set * key = NULL; \
   if (ps->key) { \
     key = malloc(sizeof(fd_set)); \
-    memcpy(key, ps->key, sizeof(fd_set)); \
     if (!key) { \
       fprintf(stderr, "Failed to allocate memory for copying select() fdset.\n"); \
       exit(1); \
     } \
+    memcpy(key, ps->key, sizeof(fd_set)); \
   } \
 
 /**
