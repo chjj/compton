@@ -1,10 +1,6 @@
 project(compton)
 cmake_minimum_required(VERSION 2.8)
 
-set(CPACK_PACKAGE_VERSION_MAJOR "0")
-set(CPACK_PACKAGE_VERSION_MINOR "0")
-set(CPACK_PACKAGE_VERSION_PATCH "0")
-
 add_subdirectory(man)
 
 set(compton_SRCS src/compton.c)
@@ -16,10 +12,30 @@ set(CMAKE_C_FLAGS_RELWITHDBGINFO "-O2 -march=native -ggdb")
 add_definitions("-Wall" "-std=c99")
 
 # == Version ==
-execute_process(COMMAND sh -c "echo -n \\\"git-$(git describe --always --dirty)-$(git log -1 --date=short --pretty=format:%cd)\\\""
+execute_process(COMMAND git describe --always --dirty
 	WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-	OUTPUT_VARIABLE COMPTON_VERSION)
-add_definitions("-DCOMPTON_VERSION=${COMPTON_VERSION}")
+	OUTPUT_VARIABLE GIT_DESCRIBE
+	OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND git log -1 --date=short --pretty=format:%cd
+	WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+	OUTPUT_VARIABLE GIT_DATE
+	OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+string(REGEX REPLACE "^v([0-9]+)[.]([0-9]+)_([0-9a-zA-Z]+)-(.*)$"
+	"\\1;\\2;\\3;\\4" RESULT ${GIT_DESCRIBE})
+
+string(REGEX REPLACE "[-]" "" GIT_DATE ${GIT_DATE})
+set(COMPTON_VERSION "git-${GIT_DESCRIBE}-${GIT_DATE}")
+
+list(GET RESULT 0 CPACK_PACKAGE_VERSION_MAJOR)
+list(GET RESULT 1 CPACK_PACKAGE_VERSION_MINOR)
+list(GET RESULT 2 PATCH_VERSION)
+list(GET RESULT 3 ADDENDUM_VERSION)
+
+set(CPACK_PACKAGE_VERSION_PATCH ${PATCH_VERSION}-${ADDENDUM_VERSION}-${GIT_DATE})
+add_definitions("-DCOMPTON_VERSION=\"${COMPTON_VERSION}\"")
+
+include("CPackConfig.cmake")
 
 # == Options ==
 
