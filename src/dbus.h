@@ -15,7 +15,8 @@
 
 #define CDBUS_SERVICE_NAME      "com.github.chjj.compton"
 #define CDBUS_INTERFACE_NAME    CDBUS_SERVICE_NAME
-#define CDBUS_OBJECT_NAME       "/com/github/chjj/compton"
+#define CDBUS_OBJECT_RELNAME    "com/github/chjj/compton"
+#define CDBUS_OBJECT_NAME       "/" CDBUS_OBJECT_RELNAME
 #define CDBUS_ERROR_PREFIX      CDBUS_INTERFACE_NAME ".error"
 #define CDBUS_ERROR_UNKNOWN     CDBUS_ERROR_PREFIX ".unknown"
 #define CDBUS_ERROR_UNKNOWN_S   "Well, I don't know what happened. Do you?"
@@ -79,28 +80,28 @@ static void
 cdbus_callback_watch_toggled(DBusWatch *watch, void *data);
 
 static bool
-cdbus_apdarg_bool(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_bool(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_int32(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_int32(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_uint32(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_uint32(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_double(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_double(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_wid(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_wid(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_enum(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_enum(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_string(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_string(session_t *ps, DBusMessageIter *iter, const void *data);
 
 static bool
-cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data);
+cdbus_apdarg_wids(session_t *ps, DBusMessageIter *iter, const void *data);
 
 /** @name DBus signal sending
  */
@@ -108,7 +109,7 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data);
 
 static bool
 cdbus_signal(session_t *ps, const char *name,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data);
 
 /**
@@ -135,8 +136,13 @@ cdbus_signal_wid(session_t *ps, const char *name, Window wid) {
 
 static bool
 cdbus_reply(session_t *ps, DBusMessage *srcmsg,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data);
+
+static bool
+cdbus_reply_variant(session_t *ps, DBusMessage *srcmsg,
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
+    const char *type, const void *data);
 
 static bool
 cdbus_reply_errm(session_t *ps, DBusMessage *msg);
@@ -208,10 +214,77 @@ cdbus_reply_enum(session_t *ps, DBusMessage *srcmsg, cdbus_enum_t eval) {
   return cdbus_reply(ps, srcmsg, cdbus_apdarg_enum, &eval);
 }
 
+/**
+ * Send a reply with a bool argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_bool(session_t *ps, DBusMessage *srcmsg, bool bval) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_bool,
+      DBUS_TYPE_BOOLEAN_AS_STRING, &bval);
+}
+
+/**
+ * Send a reply with an int32 argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_int32(session_t *ps, DBusMessage *srcmsg, int32_t val) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_int32,
+      DBUS_TYPE_INT32_AS_STRING, &val);
+}
+
+/**
+ * Send a reply with an uint32 argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_uint32(session_t *ps, DBusMessage *srcmsg, uint32_t val) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_uint32,
+      DBUS_TYPE_UINT32_AS_STRING, &val);
+}
+
+/**
+ * Send a reply with a double argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_double(session_t *ps, DBusMessage *srcmsg, double val) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_double,
+      DBUS_TYPE_DOUBLE_AS_STRING, &val);
+}
+
+/**
+ * Send a reply with a wid argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_wid(session_t *ps, DBusMessage *srcmsg, Window wid) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_wid,
+      CDBUS_TYPE_WINDOW_STR, &wid);
+}
+
+/**
+ * Send a reply with a string argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_string(session_t *ps, DBusMessage *srcmsg, const char *str) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_string,
+      DBUS_TYPE_STRING_AS_STRING, str);
+}
+
+/**
+ * Send a reply with a enum argument in a Variant.
+ */
+static inline bool
+cdbus_reply_variant_enum(session_t *ps, DBusMessage *srcmsg, cdbus_enum_t eval) {
+  return cdbus_reply_variant(ps, srcmsg, cdbus_apdarg_enum,
+      CDBUS_TYPE_ENUM_STR, &eval);
+}
+
 ///@}
 
 static bool
 cdbus_msg_get_arg(DBusMessage *msg, int count, const int type, void *pdest);
+
+static bool
+cdbus_msg_get_variant_arg(DBusMessage *msg, int count, const int type,
+      void *pdest);
 
 /**
  * Return a string representation of a D-Bus message type.

@@ -232,13 +232,12 @@ cdbus_callback_watch_toggled(DBusWatch *watch, void *data) {
  * Callback to append a bool argument to a message.
  */
 static bool
-cdbus_apdarg_bool(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_bool(session_t *ps, DBusMessageIter *iter, const void *data) {
   assert(data);
 
   dbus_bool_t val = *(const bool *) data;
 
-  if (!dbus_message_append_args(msg, DBUS_TYPE_BOOLEAN, &val,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_BOOLEAN, &val)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -250,9 +249,8 @@ cdbus_apdarg_bool(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append an int32 argument to a message.
  */
 static bool
-cdbus_apdarg_int32(session_t *ps, DBusMessage *msg, const void *data) {
-  if (!dbus_message_append_args(msg, DBUS_TYPE_INT32, data,
-        DBUS_TYPE_INVALID)) {
+cdbus_apdarg_int32(session_t *ps, DBusMessageIter *iter, const void *data) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_INT32, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -264,9 +262,8 @@ cdbus_apdarg_int32(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append an uint32 argument to a message.
  */
 static bool
-cdbus_apdarg_uint32(session_t *ps, DBusMessage *msg, const void *data) {
-  if (!dbus_message_append_args(msg, DBUS_TYPE_UINT32, data,
-        DBUS_TYPE_INVALID)) {
+cdbus_apdarg_uint32(session_t *ps, DBusMessageIter *iter, const void *data) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_UINT32, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -278,9 +275,8 @@ cdbus_apdarg_uint32(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append a double argument to a message.
  */
 static bool
-cdbus_apdarg_double(session_t *ps, DBusMessage *msg, const void *data) {
-  if (!dbus_message_append_args(msg, DBUS_TYPE_DOUBLE, data,
-        DBUS_TYPE_INVALID)) {
+cdbus_apdarg_double(session_t *ps, DBusMessageIter *iter, const void *data) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_DOUBLE, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -292,12 +288,11 @@ cdbus_apdarg_double(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append a Window argument to a message.
  */
 static bool
-cdbus_apdarg_wid(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_wid(session_t *ps, DBusMessageIter *iter, const void *data) {
   assert(data);
   cdbus_window_t val = *(const Window *)data;
 
-  if (!dbus_message_append_args(msg, CDBUS_TYPE_WINDOW, &val,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, CDBUS_TYPE_WINDOW, &val)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -309,10 +304,9 @@ cdbus_apdarg_wid(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append an cdbus_enum_t argument to a message.
  */
 static bool
-cdbus_apdarg_enum(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_enum(session_t *ps, DBusMessageIter *iter, const void *data) {
   assert(data);
-  if (!dbus_message_append_args(msg, CDBUS_TYPE_ENUM, data,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, CDBUS_TYPE_ENUM, data)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -324,13 +318,12 @@ cdbus_apdarg_enum(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append a string argument to a message.
  */
 static bool
-cdbus_apdarg_string(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_string(session_t *ps, DBusMessageIter *iter, const void *data) {
   const char *str = data;
   if (!str)
     str = "";
 
-  if (!dbus_message_append_args(msg, DBUS_TYPE_STRING, &str,
-        DBUS_TYPE_INVALID)) {
+  if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &str)) {
     printf_errf("(): Failed to append argument.");
     return false;
   }
@@ -342,7 +335,7 @@ cdbus_apdarg_string(session_t *ps, DBusMessage *msg, const void *data) {
  * Callback to append all window IDs to a message.
  */
 static bool
-cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
+cdbus_apdarg_wids(session_t *ps, DBusMessageIter *iter, const void *data) {
   // Get the number of wids we are to include
   unsigned count = 0;
   for (win *w = ps->list; w; w = w->next) {
@@ -371,9 +364,24 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
   }
 
   // Append arguments
-  if (!dbus_message_append_args(msg, DBUS_TYPE_ARRAY, CDBUS_TYPE_WINDOW,
-        &arr, count, DBUS_TYPE_INVALID)) {
+  DBusMessageIter subiter;
+  if (!dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY,
+        CDBUS_TYPE_WINDOW_STR, &subiter)) {
+    printf_errf("(): Failed to append array container.");
+    free(arr);
+    return false;
+  }
+
+  if (!dbus_message_iter_append_fixed_array(&subiter, CDBUS_TYPE_WINDOW,
+        &arr, count)) {
     printf_errf("(): Failed to append argument.");
+    dbus_message_iter_abandon_container(iter, &subiter);
+    free(arr);
+    return false;
+  }
+
+  if (!dbus_message_iter_close_container(iter, &subiter)) {
+    printf_errf("(): Failed to close array container.");
     free(arr);
     return false;
   }
@@ -394,7 +402,7 @@ cdbus_apdarg_wids(session_t *ps, DBusMessage *msg, const void *data) {
  */
 static bool
 cdbus_signal(session_t *ps, const char *name,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data) {
   DBusMessage* msg = NULL;
 
@@ -407,9 +415,13 @@ cdbus_signal(session_t *ps, const char *name,
   }
 
   // Append arguments onto message
-  if (func && !func(ps, msg, data)) {
-    dbus_message_unref(msg);
-    return false;
+  if (func) {
+    DBusMessageIter iter;
+    dbus_message_iter_init_append(msg, &iter);
+    if (!func(ps, &iter, data)) {
+      dbus_message_unref(msg);
+      return false;
+    }
   }
 
   // Send the message and flush the connection
@@ -437,7 +449,7 @@ cdbus_signal(session_t *ps, const char *name,
  */
 static bool
 cdbus_reply(session_t *ps, DBusMessage *srcmsg,
-    bool (*func)(session_t *ps, DBusMessage *msg, const void *data),
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
     const void *data) {
   DBusMessage* msg = NULL;
 
@@ -449,9 +461,71 @@ cdbus_reply(session_t *ps, DBusMessage *srcmsg,
   }
 
   // Append arguments onto message
-  if (func && !func(ps, msg, data)) {
+  if (func) {
+    DBusMessageIter iter;
+    dbus_message_iter_init_append(msg, &iter);
+    if (!func(ps, &iter, data)) {
+      dbus_message_unref(msg);
+      return false;
+    }
+  }
+
+  // Send the message and flush the connection
+  if (!dbus_connection_send(ps->dbus_conn, msg, NULL)) {
+    printf_errf("(): Failed to send D-Bus reply.");
     dbus_message_unref(msg);
     return false;
+  }
+  dbus_connection_flush(ps->dbus_conn);
+
+  // Free the message
+  dbus_message_unref(msg);
+
+  return true;
+}
+
+/**
+ * Send a D-Bus reply wrapped in a Variant.
+ *
+ * @param ps current session
+ * @param srcmsg original message
+ * @param func a function that modifies the built message, to, for example,
+ *        add an argument
+ * @param data data pointer to pass to the function
+ */
+static bool
+cdbus_reply_variant(session_t *ps, DBusMessage *srcmsg,
+    bool (*func)(session_t *ps, DBusMessageIter *iter, const void *data),
+    const char *type, const void *data) {
+  DBusMessage* msg = NULL;
+
+  // Create a reply
+  msg = dbus_message_new_method_return(srcmsg);
+  if (!msg) {
+    printf_errf("(): Failed to create D-Bus reply.");
+    return false;
+  }
+
+  // Append arguments onto message
+  if (func) {
+    DBusMessageIter iter, subiter;
+    dbus_message_iter_init_append(msg, &iter);
+
+    if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT, type,
+          &subiter)) {
+      dbus_message_unref(msg);
+      return false;
+    }
+
+    if (!func(ps, &subiter, data)) {
+      dbus_message_unref(msg);
+      return false;
+    }
+
+    if (!dbus_message_iter_close_container(&iter, &subiter)) {
+      dbus_message_unref(msg);
+      return false;
+    }
   }
 
   // Send the message and flush the connection
@@ -530,6 +604,48 @@ cdbus_msg_get_arg(DBusMessage *msg, int count, const int type, void *pdest) {
   }
 
   dbus_message_iter_get_basic(&iter, pdest);
+
+  return true;
+}
+
+/**
+ * Get n-th argument of a D-Bus message as an unpacked variant.
+ *
+ * @param count the position of the argument to get, starting from 0
+ * @param type libdbus type number of the type
+ * @param pdest pointer to the target
+ * @return true if successful, false otherwise.
+ */
+static bool
+cdbus_msg_get_variant_arg(DBusMessage *msg, int count, const int type,
+      void *pdest) {
+  assert(count >= 0);
+
+  DBusMessageIter iter = { };
+  if (!dbus_message_iter_init(msg, &iter)) {
+    printf_errf("(): Message has no argument.");
+    return false;
+  }
+
+  {
+    const int oldcount = count;
+    while (count) {
+      if (!dbus_message_iter_next(&iter)) {
+        printf_errf("(): Failed to find argument %d.", oldcount);
+        return false;
+      }
+      --count;
+    }
+  }
+
+  if (DBUS_TYPE_VARIANT != dbus_message_iter_get_arg_type(&iter)) {
+    printf_errf("(): Argument has incorrect type.");
+    return false;
+  }
+
+  DBusMessageIter subiter;
+  dbus_message_iter_recurse(&iter, &subiter);
+  dbus_message_iter_get_basic(&subiter, pdest);
 
   return true;
 }
@@ -681,69 +797,69 @@ cdbus_process_win_get(session_t *ps, DBusMessage *msg) {
     return true; \
   }
 
-  cdbus_m_win_get_do(id, cdbus_reply_wid);
+  cdbus_m_win_get_do(id, cdbus_reply_variant_wid);
 
   // next
   if (!strcmp("next", target)) {
-    cdbus_reply_wid(ps, msg, (w->next ? w->next->id: 0));
+    cdbus_reply_variant_wid(ps, msg, (w->next ? w->next->id: 0));
     return true;
   }
 
   // map_state
   if (!strcmp("map_state", target)) {
-    cdbus_reply_bool(ps, msg, w->a.map_state);
+    cdbus_reply_variant_bool(ps, msg, w->a.map_state);
     return true;
   }
 
-  cdbus_m_win_get_do(mode, cdbus_reply_enum);
-  cdbus_m_win_get_do(client_win, cdbus_reply_wid);
-  cdbus_m_win_get_do(damaged, cdbus_reply_bool);
-  cdbus_m_win_get_do(destroyed, cdbus_reply_bool);
-  cdbus_m_win_get_do(window_type, cdbus_reply_enum);
-  cdbus_m_win_get_do(wmwin, cdbus_reply_bool);
-  cdbus_m_win_get_do(leader, cdbus_reply_wid);
+  cdbus_m_win_get_do(mode, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(client_win, cdbus_reply_variant_wid);
+  cdbus_m_win_get_do(damaged, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(destroyed, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(window_type, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(wmwin, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(leader, cdbus_reply_variant_wid);
   // focused_real
   if (!strcmp("focused_real", target)) {
-    cdbus_reply_bool(ps, msg, win_is_focused_real(ps, w));
+    cdbus_reply_variant_bool(ps, msg, win_is_focused_real(ps, w));
     return true;
   }
-  cdbus_m_win_get_do(fade_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(shadow_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(focused_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(invert_color_force, cdbus_reply_enum);
-  cdbus_m_win_get_do(name, cdbus_reply_string);
-  cdbus_m_win_get_do(class_instance, cdbus_reply_string);
-  cdbus_m_win_get_do(class_general, cdbus_reply_string);
-  cdbus_m_win_get_do(role, cdbus_reply_string);
+  cdbus_m_win_get_do(fade_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(shadow_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(focused_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(invert_color_force, cdbus_reply_variant_enum);
+  cdbus_m_win_get_do(name, cdbus_reply_variant_string);
+  cdbus_m_win_get_do(class_instance, cdbus_reply_variant_string);
+  cdbus_m_win_get_do(class_general, cdbus_reply_variant_string);
+  cdbus_m_win_get_do(role, cdbus_reply_variant_string);
 
-  cdbus_m_win_get_do(opacity, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_tgt, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_prop, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_prop_client, cdbus_reply_uint32);
-  cdbus_m_win_get_do(opacity_set, cdbus_reply_uint32);
+  cdbus_m_win_get_do(opacity, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_tgt, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_prop, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_prop_client, cdbus_reply_variant_uint32);
+  cdbus_m_win_get_do(opacity_set, cdbus_reply_variant_uint32);
 
-  cdbus_m_win_get_do(frame_opacity, cdbus_reply_double);
+  cdbus_m_win_get_do(frame_opacity, cdbus_reply_variant_double);
   if (!strcmp("left_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.left);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.left);
     return true;
   }
   if (!strcmp("right_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.right);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.right);
     return true;
   }
   if (!strcmp("top_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.top);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.top);
     return true;
   }
   if (!strcmp("bottom_width", target)) {
-    cdbus_reply_uint32(ps, msg, w->frame_extents.bottom);
+    cdbus_reply_variant_uint32(ps, msg, w->frame_extents.bottom);
     return true;
   }
 
-  cdbus_m_win_get_do(shadow, cdbus_reply_bool);
-  cdbus_m_win_get_do(fade, cdbus_reply_bool);
-  cdbus_m_win_get_do(invert_color, cdbus_reply_bool);
-  cdbus_m_win_get_do(blur_background, cdbus_reply_bool);
+  cdbus_m_win_get_do(shadow, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(fade, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(invert_color, cdbus_reply_variant_bool);
+  cdbus_m_win_get_do(blur_background, cdbus_reply_variant_bool);
 #undef cdbus_m_win_get_do
 
   printf_errf("(): " CDBUS_ERROR_BADTGT_S, target);
@@ -782,7 +898,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 #define cdbus_m_win_set_do(tgt, type, real_type) \
   if (!strcmp(MSTR(tgt), target)) { \
     real_type val; \
-    if (!cdbus_msg_get_arg(msg, 2, type, &val)) \
+    if (!cdbus_msg_get_variant_arg(msg, 2, type, &val)) \
       return false; \
     w->tgt = val; \
     goto cdbus_process_win_set_success; \
@@ -790,7 +906,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("shadow_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_shadow_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -798,7 +914,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("fade_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_fade_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -806,7 +922,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("focused_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_focused_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -814,7 +930,7 @@ cdbus_process_win_set(session_t *ps, DBusMessage *msg) {
 
   if (!strcmp("invert_color_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 2, CDBUS_TYPE_ENUM, &val))
       return false;
     win_set_invert_color_force(ps, w, val);
     goto cdbus_process_win_set_success;
@@ -889,94 +1005,94 @@ cdbus_process_opts_get(session_t *ps, DBusMessage *msg) {
 
   // version
   if (!strcmp("version", target)) {
-    cdbus_reply_string(ps, msg, COMPTON_VERSION);
+    cdbus_reply_variant_string(ps, msg, COMPTON_VERSION);
     return true;
   }
 
   // pid
   if (!strcmp("pid", target)) {
-    cdbus_reply_int32(ps, msg, getpid());
+    cdbus_reply_variant_int32(ps, msg, getpid());
     return true;
   }
 
   // display
   if (!strcmp("display", target)) {
-    cdbus_reply_string(ps, msg, DisplayString(ps->dpy));
+    cdbus_reply_variant_string(ps, msg, DisplayString(ps->dpy));
     return true;
   }
 
-  cdbus_m_opts_get_do(config_file, cdbus_reply_string);
-  cdbus_m_opts_get_do(display_repr, cdbus_reply_string);
-  cdbus_m_opts_get_do(write_pid_path, cdbus_reply_string);
-  cdbus_m_opts_get_do(mark_wmwin_focused, cdbus_reply_bool);
-  cdbus_m_opts_get_do(mark_ovredir_focused, cdbus_reply_bool);
-  cdbus_m_opts_get_do(fork_after_register, cdbus_reply_bool);
-  cdbus_m_opts_get_do(detect_rounded_corners, cdbus_reply_bool);
-  cdbus_m_opts_get_do(paint_on_overlay, cdbus_reply_bool);
+  cdbus_m_opts_get_do(config_file, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(display_repr, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(write_pid_path, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(mark_wmwin_focused, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(mark_ovredir_focused, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(fork_after_register, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(detect_rounded_corners, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(paint_on_overlay, cdbus_reply_variant_bool);
   // paint_on_overlay_id: Get ID of the X composite overlay window
   if (!strcmp("paint_on_overlay_id", target)) {
-    cdbus_reply_uint32(ps, msg, ps->overlay);
+    cdbus_reply_variant_uint32(ps, msg, ps->overlay);
     return true;
   }
-  cdbus_m_opts_get_do(unredir_if_possible, cdbus_reply_bool);
-  cdbus_m_opts_get_do(unredir_if_possible_delay, cdbus_reply_int32);
-  cdbus_m_opts_get_do(redirected_force, cdbus_reply_enum);
-  cdbus_m_opts_get_do(stoppaint_force, cdbus_reply_enum);
-  cdbus_m_opts_get_do(logpath, cdbus_reply_string);
-  cdbus_m_opts_get_do(synchronize, cdbus_reply_bool);
+  cdbus_m_opts_get_do(unredir_if_possible, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(unredir_if_possible_delay, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(redirected_force, cdbus_reply_variant_enum);
+  cdbus_m_opts_get_do(stoppaint_force, cdbus_reply_variant_enum);
+  cdbus_m_opts_get_do(logpath, cdbus_reply_variant_string);
+  cdbus_m_opts_get_do(synchronize, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(refresh_rate, cdbus_reply_int32);
-  cdbus_m_opts_get_do(sw_opti, cdbus_reply_bool);
+  cdbus_m_opts_get_do(refresh_rate, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(sw_opti, cdbus_reply_variant_bool);
   if (!strcmp("vsync", target)) {
     assert(ps->o.vsync < sizeof(VSYNC_STRS) / sizeof(VSYNC_STRS[0]));
-    cdbus_reply_string(ps, msg, VSYNC_STRS[ps->o.vsync]);
+    cdbus_reply_variant_string(ps, msg, VSYNC_STRS[ps->o.vsync]);
     return true;
   }
   if (!strcmp("backend", target)) {
     assert(ps->o.backend < sizeof(BACKEND_STRS) / sizeof(BACKEND_STRS[0]));
-    cdbus_reply_string(ps, msg, BACKEND_STRS[ps->o.backend]);
+    cdbus_reply_variant_string(ps, msg, BACKEND_STRS[ps->o.backend]);
     return true;
   }
-  cdbus_m_opts_get_do(dbe, cdbus_reply_bool);
-  cdbus_m_opts_get_do(vsync_aggressive, cdbus_reply_bool);
+  cdbus_m_opts_get_do(dbe, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(vsync_aggressive, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(shadow_red, cdbus_reply_double);
-  cdbus_m_opts_get_do(shadow_green, cdbus_reply_double);
-  cdbus_m_opts_get_do(shadow_blue, cdbus_reply_double);
-  cdbus_m_opts_get_do(shadow_radius, cdbus_reply_int32);
-  cdbus_m_opts_get_do(shadow_offset_x, cdbus_reply_int32);
-  cdbus_m_opts_get_do(shadow_offset_y, cdbus_reply_int32);
-  cdbus_m_opts_get_do(shadow_opacity, cdbus_reply_double);
-  cdbus_m_opts_get_do(clear_shadow, cdbus_reply_bool);
-  cdbus_m_opts_get_do(xinerama_shadow_crop, cdbus_reply_bool);
+  cdbus_m_opts_get_do(shadow_red, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(shadow_green, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(shadow_blue, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(shadow_radius, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(shadow_offset_x, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(shadow_offset_y, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(shadow_opacity, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(clear_shadow, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(xinerama_shadow_crop, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(fade_delta, cdbus_reply_int32);
-  cdbus_m_opts_get_do(fade_in_step, cdbus_reply_int32);
-  cdbus_m_opts_get_do(fade_out_step, cdbus_reply_int32);
-  cdbus_m_opts_get_do(no_fading_openclose, cdbus_reply_bool);
+  cdbus_m_opts_get_do(fade_delta, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(fade_in_step, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(fade_out_step, cdbus_reply_variant_int32);
+  cdbus_m_opts_get_do(no_fading_openclose, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(blur_background, cdbus_reply_bool);
-  cdbus_m_opts_get_do(blur_background_frame, cdbus_reply_bool);
-  cdbus_m_opts_get_do(blur_background_fixed, cdbus_reply_bool);
+  cdbus_m_opts_get_do(blur_background, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(blur_background_frame, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(blur_background_fixed, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(inactive_dim, cdbus_reply_double);
-  cdbus_m_opts_get_do(inactive_dim_fixed, cdbus_reply_bool);
+  cdbus_m_opts_get_do(inactive_dim, cdbus_reply_variant_double);
+  cdbus_m_opts_get_do(inactive_dim_fixed, cdbus_reply_variant_bool);
 
-  cdbus_m_opts_get_do(use_ewmh_active_win, cdbus_reply_bool);
-  cdbus_m_opts_get_do(detect_transient, cdbus_reply_bool);
-  cdbus_m_opts_get_do(detect_client_leader, cdbus_reply_bool);
+  cdbus_m_opts_get_do(use_ewmh_active_win, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(detect_transient, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(detect_client_leader, cdbus_reply_variant_bool);
 
 #ifdef CONFIG_VSYNC_OPENGL
-  cdbus_m_opts_get_do(glx_no_stencil, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_copy_from_front, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_use_copysubbuffermesa, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_no_rebind_pixmap, cdbus_reply_bool);
-  cdbus_m_opts_get_do(glx_swap_method, cdbus_reply_int32);
+  cdbus_m_opts_get_do(glx_no_stencil, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_copy_from_front, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_use_copysubbuffermesa, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_no_rebind_pixmap, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(glx_swap_method, cdbus_reply_variant_int32);
 #endif
 
-  cdbus_m_opts_get_do(track_focus, cdbus_reply_bool);
-  cdbus_m_opts_get_do(track_wdata, cdbus_reply_bool);
-  cdbus_m_opts_get_do(track_leader, cdbus_reply_bool);
+  cdbus_m_opts_get_do(track_focus, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(track_wdata, cdbus_reply_variant_bool);
+  cdbus_m_opts_get_do(track_leader, cdbus_reply_variant_bool);
 #undef cdbus_m_opts_get_do
 
   printf_errf("(): " CDBUS_ERROR_BADTGT_S, target);
@@ -998,7 +1114,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
 #define cdbus_m_opts_set_do(tgt, type, real_type) \
   if (!strcmp(MSTR(tgt), target)) { \
     real_type val; \
-    if (!cdbus_msg_get_arg(msg, 1, type, &val)) \
+    if (!cdbus_msg_get_variant_arg(msg, 1, type, &val)) \
       return false; \
     ps->o.tgt = val; \
     goto cdbus_process_opts_set_success; \
@@ -1007,7 +1123,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // fade_delta
   if (!strcmp("fade_delta", target)) {
     int32_t val = 0.0;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_INT32, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_INT32, &val))
       return false;
     ps->o.fade_delta = max_i(val, 1);
     goto cdbus_process_opts_set_success;
@@ -1016,7 +1132,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // fade_in_step
   if (!strcmp("fade_in_step", target)) {
     double val = 0.0;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
       return false;
     ps->o.fade_in_step = normalize_d(val) * OPAQUE;
     goto cdbus_process_opts_set_success;
@@ -1025,7 +1141,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // fade_out_step
   if (!strcmp("fade_out_step", target)) {
     double val = 0.0;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_DOUBLE, &val))
       return false;
     ps->o.fade_out_step = normalize_d(val) * OPAQUE;
     goto cdbus_process_opts_set_success;
@@ -1034,7 +1150,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // no_fading_openclose
   if (!strcmp("no_fading_openclose", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     opts_set_no_fading_openclose(ps, val);
     goto cdbus_process_opts_set_success;
@@ -1043,7 +1159,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // unredir_if_possible
   if (!strcmp("unredir_if_possible", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     if (ps->o.unredir_if_possible != val) {
       ps->o.unredir_if_possible = val;
@@ -1055,7 +1171,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // clear_shadow
   if (!strcmp("clear_shadow", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     if (ps->o.clear_shadow != val) {
       ps->o.clear_shadow = val;
@@ -1067,7 +1183,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // track_focus
   if (!strcmp("track_focus", target)) {
     dbus_bool_t val = FALSE;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_BOOLEAN, &val))
       return false;
     // You could enable this option, but never turn if off
     if (val) {
@@ -1079,7 +1195,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // vsync
   if (!strcmp("vsync", target)) {
     const char * val = NULL;
-    if (!cdbus_msg_get_arg(msg, 1, DBUS_TYPE_STRING, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, DBUS_TYPE_STRING, &val))
       return false;
     vsync_deinit(ps);
     if (!parse_vsync(ps, val)) {
@@ -1098,7 +1214,7 @@ cdbus_process_opts_set(session_t *ps, DBusMessage *msg) {
   // redirected_force
   if (!strcmp("redirected_force", target)) {
     cdbus_enum_t val = UNSET;
-    if (!cdbus_msg_get_arg(msg, 1, CDBUS_TYPE_ENUM, &val))
+    if (!cdbus_msg_get_variant_arg(msg, 1, CDBUS_TYPE_ENUM, &val))
       return false;
     ps->o.redirected_force = val;
     force_repaint(ps);
@@ -1162,10 +1278,47 @@ cdbus_process_introspect(session_t *ps, DBusMessage *msg) {
     "    </signal>\n"
     "    <method name='reset' />\n"
     "    <method name='repaint' />\n"
+    "    <method name='list_win'>\n"
+    "      <arg name='wids' direction='out' type='a" CDBUS_TYPE_WINDOW_STR "'/>\n"
+    "    </method>\n"
+    "    <method name='win_get'>\n"
+    "      <arg name='wid' direction='in' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"
+    "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='out' type='v' />\n"
+    "    </method>\n"
+    "    <method name='win_set'>\n"
+    "      <arg name='wid' direction='in' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"
+    "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='in' type='v' />\n"
+    "      <arg name='success' direction='out' type='b' />\n"
+    "    </method>\n"
+    "    <method name='find_win'>\n"
+    "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='wid' direction='out' type='" CDBUS_TYPE_WINDOW_STR "'/>\n"
+    "    </method>\n"
+    "    <method name='opts_get'>\n"
+    "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='out' type='v' />\n"
+    "    </method>\n"
+    "    <method name='opts_set'>\n"
+    "      <arg name='target' direction='in' type='s' />\n"
+    "      <arg name='value' direction='in' type='v' />\n"
+    "      <arg name='success' direction='out' type='b' />\n"
+    "    </method>\n"
     "  </interface>\n"
     "</node>\n";
 
-  cdbus_reply_string(ps, msg, str_introspect);
+  const static char *str_root_introspect =
+    "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n"
+    " \"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n"
+    "<node>\n"
+    "  <node name='" CDBUS_OBJECT_RELNAME "'/>\n"
+    "</node>\n";
+
+  if (!strcmp(dbus_message_get_path(msg), "/"))
+    cdbus_reply_string(ps, msg, str_root_introspect);
+  else
+    cdbus_reply_string(ps, msg, str_introspect);
 
   return true;
 }
