@@ -714,6 +714,12 @@ typedef struct _options_t {
   /// Whether to use fixed inactive dim opacity, instead of deciding
   /// based on window opacity.
   bool inactive_dim_fixed;
+  /// Whether to dim inactive windows gradually
+  bool inactive_dim_fading;
+  /// How much to fade in a single dimming step
+  double inactive_dim_step;
+  /// How much to fade in a single undimming step
+  double inactive_undim_step;
   /// Conditions of windows to have inverted colors.
   c2_lptr_t *invert_color_list;
   /// Rules to change window opacity.
@@ -1212,8 +1218,10 @@ typedef struct _win {
   long prop_shadow;
 
   // Dim-related members
-  /// Whether the window is to be dimmed.
-  bool dim;
+  /// Current dim opacity.
+  double dim_opacity;
+  /// Target dim opacity.
+  double dim_opacity_tgt;
 
   /// Whether to invert window color.
   bool invert_color;
