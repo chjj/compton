@@ -1121,7 +1121,9 @@ paint_preprocess(session_t *ps, win *list) {
     // Restore flags from last paint if the window is being faded out
     if (IsUnmapped == w->a.map_state) {
       win_set_shadow(ps, w, w->shadow_last);
-      w->fade = w->fade_last;
+      if (!ps->o.no_fading_openclose || !w->in_openclose) {
+        w->fade = w->fade_last;
+      }
       win_set_invert_color(ps, w, w->invert_color_last);
       win_set_blur_background(ps, w, w->blur_background_last);
     }
