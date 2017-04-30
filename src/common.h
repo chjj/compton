@@ -1816,11 +1816,11 @@ fds_drop(session_t *ps, int fd, short events) {
   fd_set * key = NULL; \
   if (ps->key) { \
     key = malloc(sizeof(fd_set)); \
-    memcpy(key, ps->key, sizeof(fd_set)); \
     if (!key) { \
       fprintf(stderr, "Failed to allocate memory for copying select() fdset.\n"); \
       exit(1); \
     } \
+    memcpy(key, ps->key, sizeof(fd_set)); \
   } \
 
 /**
