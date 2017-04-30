@@ -187,6 +187,9 @@ OPTIONS
 *--focus-exclude* 'CONDITION'::
 	Specify a list of conditions of windows that should always be considered focused.
 
+*--inactive-dim-exclude* 'CONDITION'::
+	Specify a list of conditions of windows that should not be dimmed.
+
 *--inactive-dim-fixed*::
 	Use fixed inactive dim value, instead of adjusting according to window opacity.
 
