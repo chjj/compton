@@ -903,9 +903,6 @@ win_mark_client(session_t *ps, win *w, Window client);
 static void
 win_unmark_client(session_t *ps, win *w);
 
-static void
-win_recheck_client(session_t *ps, win *w);
-
 static bool
 add_win(session_t *ps, Window id, Window prev);
 

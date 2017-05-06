@@ -29,18 +29,6 @@
 
 #define C2_MAX_LEVELS 10
 
-typedef struct _c2_b c2_b_t;
-typedef struct _c2_l c2_l_t;
-
-/// Pointer to a condition tree.
-typedef struct {
-  bool isbranch : 1;
-  union {
-    c2_b_t *b;
-    c2_l_t *l;
-  };
-} c2_ptr_t;
-
 /// Initializer for c2_ptr_t.
 #define C2_PTR_INIT { \
   .isbranch = false, \
@@ -165,13 +153,6 @@ struct _c2_l {
 
 const static c2_l_t leaf_def = C2_L_INIT;
 
-/// Linked list type of conditions.
-struct _c2_lptr {
-  c2_ptr_t ptr;
-  void *data;
-  struct _c2_lptr *next;
-};
-
 /// Initializer for c2_lptr_t.
 #define C2_LPTR_INIT { \
   .ptr = C2_PTR_INIT, \
@@ -295,6 +276,9 @@ c2h_b_opcmp(c2_b_op_t op1, c2_b_op_t op2) {
   return c2h_b_opp(op1) - c2h_b_opp(op2);
 }
 
+bool
+c2_removed(c2_lptr_t **pcondlst, const uint index);
+
 static int
 c2_parse_grp(session_t *ps, const char *pattern, int offset, c2_ptr_t *presult, int level);
 
@@ -333,16 +317,14 @@ c2h_dump_str_tgt(const c2_l_t *pleaf);
 static const char *
 c2h_dump_str_type(const c2_l_t *pleaf);
 
-static void
-c2_dump_raw(c2_ptr_t p);
-
 /**
- * Wrapper of c2_dump_raw().
+ * Wrapper of c2_dump_str().
  */
 static inline void
 c2_dump(c2_ptr_t p) {
-  c2_dump_raw(p);
-  printf("\n");
+  char *c2_repr = c2_dump_str(p);
+  printf("%s\n", c2_repr);
+  free(c2_repr);
   fflush(stdout);
 }
 

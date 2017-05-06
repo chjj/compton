@@ -1689,11 +1689,15 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
     free_picture(ps, &pict);
 
   // Dimming the window if needed
+  double dim_opacity = w->permanent_dim;
   if (w->dim) {
-    double dim_opacity = ps->o.inactive_dim;
+    double inactive_dim = ps->o.inactive_dim;
     if (!ps->o.inactive_dim_fixed)
-      dim_opacity *= get_opacity_percent(w);
+      inactive_dim *= get_opacity_percent(w);
+    dim_opacity += inactive_dim;
+  }
 
+  if (dim_opacity) {
     switch (ps->o.backend) {
       case BKEND_XRENDER:
       case BKEND_XR_GLX_HYBRID:
@@ -2390,7 +2394,7 @@ calc_opacity(session_t *ps, win *w) {
 }
 
 /**
- * Determine whether a window is to be dimmed.
+ * Determine whether a window is to be dimmed due to inactivity.
  */
 static void
 calc_dim(session_t *ps, win *w) {
@@ -2599,6 +2603,24 @@ win_determine_blur_background(session_t *ps, win *w) {
 }
 
 /**
+ * Update window dim according to dim rules.
+ */
+void
+win_update_dim_rule(session_t *ps, win *w) {
+  if (IsViewable != w->a.map_state)
+    return;
+
+#ifdef CONFIG_C2
+  void *val = NULL;
+  if (c2_matchd(ps, w, ps->o.dim_rules, &w->cache_dimrule, &val)) {
+    w->permanent_dim = ((double) (long) val) / 100.0;
+  } else {
+    w->permanent_dim = 0.0;
+  }
+#endif
+}
+
+/**
  * Update window opacity according to opacity rules.
  */
 static void
@@ -2637,6 +2659,8 @@ win_on_wtype_change(session_t *ps, win *w) {
     win_determine_invert_color(ps, w);
   if (ps->o.opacity_rules)
     win_update_opacity_rule(ps, w);
+  if (ps->o.dim_rules)
+     win_update_dim_rule(ps, w);
 }
 
 /**
@@ -2656,6 +2680,8 @@ win_on_factor_change(session_t *ps, win *w) {
     win_determine_blur_background(ps, w);
   if (ps->o.opacity_rules)
     win_update_opacity_rule(ps, w);
+  if (ps->o.dim_rules)
+    win_update_dim_rule(ps, w);
   if (IsViewable == w->a.map_state && ps->o.paint_blacklist)
     w->paint_excluded = win_match(ps, w, ps->o.paint_blacklist,
         &w->cache_pblst);
@@ -2803,7 +2829,7 @@ win_unmark_client(session_t *ps, win *w) {
  * @param ps current session
  * @param w struct _win of the parent window
  */
-static void
+void
 win_recheck_client(session_t *ps, win *w) {
   // Initialize wmwin to false
   w->wmwin = false;
@@ -2911,6 +2937,7 @@ add_win(session_t *ps, Window id, Window prev) {
     .prop_shadow = -1,
 
     .dim = false,
+  .permanent_dim = 0.0,
 
     .invert_color = false,
     .invert_color_force = UNSET,
@@ -4727,11 +4754,23 @@ usage(int ret) {
     "  inverted color. Resource-hogging, and is not well tested.\n"
     "\n"
     "--opacity-rule opacity:condition\n"
+#undef WARNING
+#ifndef CONFIG_C2
+#define WARNING WARNING_DISABLED
+#else
+#define WARNING
+#endif
     "  Specify a list of opacity rules, in the format \"PERCENT:PATTERN\",\n"
     "  like \'50:name *= \"Firefox\"'. compton-trans is recommended over\n"
     "  this. Note we do not distinguish 100% and unset, and we don't make\n"
     "  any guarantee about possible conflicts with other programs that set\n"
     "  _NET_WM_WINDOW_OPACITY on frame or client windows.\n"
+    "  " WARNING "\n"
+    "\n"
+    "--dim-rule value:condition\n"
+  "  Specify a list of dim rules, in the format \"VALUE:PATTERN\",\n"
+  "  like '50:!class_g *= \"URxvt\"', where `VALUE` is in the 0.0 - 1.0\n"
+  "  range (0.0 means no dim)." WARNING "\n"
     "\n"
     "--shadow-exclude-reg geometry\n"
     "  Specify a X geometry that describes the region in which shadow\n"
@@ -5264,6 +5303,42 @@ parse_geometry_end:
 }
 
 /**
+ * Parse a list of dim rules.
+ */
+bool
+parse_rule_dim(session_t *ps, c2_lptr_t **dim_rules, const char *src) {
+#ifdef CONFIG_C2
+  // Find dim value
+  char *endptr = NULL;
+  long val = strtol(src, &endptr, 0);
+  if (!endptr || endptr == src) {
+    printf_errf("(\"%s\"): No dim value specified?", src);
+    return false;
+  }
+  if(val > 100 || val < 0) {
+    printf_errf("(\"%s\"): Dim value %ld invalid.", src, val);
+    return false;
+  }
+
+  // Skip over spaces
+  while (*endptr && isspace(*endptr))
+    ++endptr;
+  if (':' != *endptr) {
+    printf_errf("(\"%s\"): Dim value terminator not found.", src);
+    return false;
+  }
+  ++endptr;
+
+  // Parse pattern
+  // I hope 1-100 is acceptable for (void *)
+  return c2_parsed(ps, dim_rules, endptr, (void *) val);
+#else
+  printf_errf("(\"%s\"): Condition support not compiled in.", src);
+  return false;
+#endif
+}
+
+/**
  * Parse a list of opacity rules.
  */
 static inline bool
@@ -5422,6 +5497,27 @@ parse_cfg_condlst_opct(session_t *ps, const config_t *pcfg, const char *name) {
     // Treat it as a single pattern if it's a string
     else if (CONFIG_TYPE_STRING == config_setting_type(setting)) {
       parse_rule_opacity(ps, config_setting_get_string(setting));
+    }
+  }
+}
+
+/**
+ * Parse an dim rule list in configuration file.
+ */
+static inline void
+parse_cfg_condlst_dim(session_t *ps, const config_t *pcfg, const char *name) {
+  config_setting_t *setting = config_lookup(pcfg, name);
+  if (setting) {
+    // Parse an array of options
+    if (config_setting_is_array(setting)) {
+      int i = config_setting_length(setting);
+      while (i--)
+        if (!parse_rule_dim(ps, &ps->o.dim_rules, config_setting_get_string_elem(setting, i)))
+          exit(1);
+    }
+    // Treat it as a single pattern if it's a string
+    else if (CONFIG_TYPE_STRING == config_setting_type(setting)) {
+      parse_rule_dim(ps, &ps->o.dim_rules, config_setting_get_string(setting));
     }
   }
 }
@@ -5608,6 +5704,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   parse_cfg_condlst(ps, &cfg, &ps->o.blur_background_blacklist, "blur-background-exclude");
   // --opacity-rule
   parse_cfg_condlst_opct(ps, &cfg, "opacity-rule");
+  // --dim-rule
+  parse_cfg_condlst_dim(ps, &cfg, "dim-rule");
   // --unredir-if-possible-exclude
   parse_cfg_condlst(ps, &cfg, &ps->o.unredir_if_possible_blacklist, "unredir-if-possible-exclude");
   // --blur-background
@@ -5756,6 +5854,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
+    { "dim-rule", required_argument, NULL, 321 },
     { "reredir-on-root-change", no_argument, NULL, 731 },
     { "glx-reinit-on-root-change", no_argument, NULL, 732 },
     // Must terminate with a NULL entry
@@ -6025,6 +6124,11 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(316, force_win_blend);
       case 317:
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
+        break;
+      case 321:
+        // --dim-rule
+        if (!parse_rule_dim(ps, &ps->o.dim_rules, optarg))
+          exit(1);
         break;
       P_CASEBOOL(319, no_x_selection);
       P_CASEBOOL(731, reredir_on_root_change);
@@ -7036,6 +7140,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .inactive_dim_fixed = false,
       .invert_color_list = NULL,
       .opacity_rules = NULL,
+      .dim_rules = NULL,
 
       .wintype_focus = { false },
       .use_ewmh_active_win = false,
@@ -7520,6 +7625,7 @@ session_destroy(session_t *ps) {
   free_wincondlst(&ps->o.invert_color_list);
   free_wincondlst(&ps->o.blur_background_blacklist);
   free_wincondlst(&ps->o.opacity_rules);
+  free_wincondlst(&ps->o.dim_rules);
   free_wincondlst(&ps->o.paint_blacklist);
   free_wincondlst(&ps->o.unredir_if_possible_blacklist);
 #endif

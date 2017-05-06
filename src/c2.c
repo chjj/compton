@@ -57,6 +57,93 @@ c2_parsed(session_t *ps, c2_lptr_t **pcondlst, const char *pattern,
   }
 }
 
+/**
+ * Remove an element from a condition list.
+ */
+bool
+c2_remove(c2_lptr_t **pcondlst, const uint index) {
+  u_int16_t cur = 0;
+  c2_lptr_t *rule = NULL;
+  c2_lptr_t *rule_prev = NULL;
+  c2_lptr_t *rule_next = NULL;
+
+  for (rule = *pcondlst; rule; rule = rule->next, cur++) {
+    if (cur == index) {
+      rule_next = c2_free_lptr(rule);
+      if (rule_prev == NULL)              //              rule -> rule_next
+        *pcondlst = rule_next;
+      else if (rule_next == NULL)         //              rule -> NULL
+        rule_prev->next = rule_next;
+      else {                              // rule_prev -> rule -> rule_next
+        rule_prev->next = rule_next;
+        *pcondlst = rule_prev;
+      }
+      return true;
+    }
+    rule_prev = rule;
+  }
+
+  return false;
+}
+
+/**
+ * Remove an element from a condition list based on its representation.
+ */
+bool
+c2_remove_reprd(c2_lptr_t **pcondlst, const char *tgt_rule, \
+                const char *data_fmt) {
+  u_int16_t cur = 0;
+  c2_lptr_t *rule = NULL;
+  char *rule_repr = NULL;
+
+  for (rule = *pcondlst; rule; rule = rule->next, cur++) {
+    rule_repr = data_fmt ? c2_dump_strd(rule, data_fmt) : c2_dump_str(rule->ptr);
+    if (!strcmp(rule_repr, tgt_rule)) {
+      free(rule_repr);
+      return c2_remove(pcondlst, cur);
+    }
+    free(rule_repr);
+  }
+  return false;
+
+}
+
+/**
+ * Replace an element from a condition list based on its representation.
+ */
+bool
+c2_replace_reprd(session_t *ps, c2_lptr_t **pcondlst, const char *tgt_rule, \
+                c2_lptr_t *new_rule_l, const char *data_fmt) {
+  c2_lptr_t *rule = NULL;
+  c2_lptr_t *next_rule = NULL;
+  c2_lptr_t *rule_prev = NULL;
+  char *rule_repr = NULL;
+
+  for (rule = *pcondlst; rule; rule = rule->next) {
+    rule_repr = data_fmt ? c2_dump_strd(rule, data_fmt) : c2_dump_str(rule->ptr);
+    if (!strcmp(rule_repr, tgt_rule)) {
+      free(rule_repr);
+
+      // Remove the targeted rule
+      next_rule = c2_free_lptr(rule);
+
+      // Insert the new rule into a list
+      // Inject into existing pcondlst
+      new_rule_l->next = next_rule;
+      if (rule_prev)
+        rule_prev->next = new_rule_l;
+      else
+        *pcondlst = new_rule_l;
+
+      return true;
+    }
+
+    free(rule_repr);
+    rule_prev = rule;
+  }
+  return false;
+}
+
 #undef c2_error
 #define c2_error(format, ...) do { \
   printf_err("Pattern \"%s\" pos %d: " format, pattern, offset, \
@@ -895,98 +982,135 @@ c2h_dump_str_type(const c2_l_t *pleaf) {
   return NULL;
 }
 
+char *
+c2_dump_strd(c2_lptr_t *l, const char *data_fmt) {
+  char *rule_repr = mstrcpy("");
+  mstrextendf(&rule_repr, data_fmt, l->data);
+
+  char *tmp = c2_dump_str(l->ptr);
+  mstrextendf(&rule_repr, ":%s", tmp);
+
+  free(tmp);
+  return rule_repr;
+}
+
 /**
  * Dump a condition tree.
  */
-static void
-c2_dump_raw(c2_ptr_t p) {
+char *
+c2_dump_str(c2_ptr_t p) {
+  char *_buf = mstrcpy("");
+  char **buf = &_buf;
+  char *inner_str = NULL;
+
   // For a branch
   if (p.isbranch) {
     const c2_b_t * const pbranch = p.b;
 
-    if (!pbranch)
-      return;
+    if (!pbranch) {
+      printf_errf("(): Branch of condition not set.");
+      goto fail;
+    }
 
     if (pbranch->neg)
-      putchar('!');
+      mstrextend(buf, "!");
 
-    printf("(");
-    c2_dump_raw(pbranch->opr1);
+    mstrextend(buf, "(");
+    inner_str = c2_dump_str(pbranch->opr1);
+    if (!inner_str) {
+      printf_errf("(): Left operand missing.");
+      goto fail;
+    }
+    mstrextend(buf, inner_str);
+    free(inner_str);
 
     switch (pbranch->op) {
-      case C2_B_OAND: printf(" && ");   break;
-      case C2_B_OOR:  printf(" || ");   break;
-      case C2_B_OXOR: printf(" XOR ");  break;
+      case C2_B_OAND: mstrextend(buf, " && ");   break;
+      case C2_B_OOR:  mstrextend(buf, " || ");   break;
+      case C2_B_OXOR: mstrextend(buf, " XOR ");  break;
       default:        assert(0);        break;
     }
 
-    c2_dump_raw(pbranch->opr2);
-    printf(")");
+    inner_str = c2_dump_str(pbranch->opr2);
+    if (!inner_str) {
+      printf_errf("(): Right operand missing.");
+      goto fail;
+    }
+    mstrextend(buf, inner_str);
+    free(inner_str);
+    mstrextend(buf, ")");
   }
   // For a leaf
   else {
     const c2_l_t * const pleaf = p.l;
 
     if (!pleaf)
-      return;
+      goto fail;
 
     if (C2_L_OEXISTS == pleaf->op && pleaf->neg)
-      putchar('!');
+      mstrextend(buf, "!");
 
     // Print target name, type, and format
     {
-      printf("%s", c2h_dump_str_tgt(pleaf));
+      mstrextendf(buf, "%s", c2h_dump_str_tgt(pleaf));
       if (pleaf->tgt_onframe)
-        putchar('@');
+        mstrextend(buf, "@");
       if (pleaf->index >= 0)
-        printf("[%d]", pleaf->index);
-      printf(":%d%s", pleaf->format, c2h_dump_str_type(pleaf));
+        mstrextendf(buf, "[%d]", pleaf->index);
+      mstrextendf(buf, ":%d%s", pleaf->format, c2h_dump_str_type(pleaf));
     }
 
     // Print operator
-    putchar(' ');
+    mstrextend(buf, " ");
 
     if (C2_L_OEXISTS != pleaf->op && pleaf->neg)
-      putchar('!');
+      mstrextend(buf, "!");
 
     switch (pleaf->match) {
       case C2_L_MEXACT:     break;
-      case C2_L_MCONTAINS:  putchar('*');   break;
-      case C2_L_MSTART:     putchar('^');   break;
-      case C2_L_MPCRE:      putchar('~');   break;
-      case C2_L_MWILDCARD:  putchar('%');   break;
+      case C2_L_MCONTAINS:  mstrextend(buf, "*");   break;
+      case C2_L_MSTART:     mstrextend(buf, "^");   break;
+      case C2_L_MPCRE:      mstrextend(buf, "~");   break;
+      case C2_L_MWILDCARD:  mstrextend(buf, "%");   break;
     }
 
     if (pleaf->match_ignorecase)
-      putchar('?');
+      mstrextend(buf, "?");
 
     switch (pleaf->op) {
       case C2_L_OEXISTS:                        break;
-      case C2_L_OEQ:      fputs("=",  stdout);  break;
-      case C2_L_OGT:      fputs(">",  stdout);  break;
-      case C2_L_OGTEQ:    fputs(">=", stdout);  break;
-      case C2_L_OLT:      fputs("<",  stdout);  break;
-      case C2_L_OLTEQ:    fputs("<=",  stdout); break;
+      case C2_L_OEQ:      mstrextendf(buf, "=",  stdout);  break;
+      case C2_L_OGT:      mstrextendf(buf, ">",  stdout);  break;
+      case C2_L_OGTEQ:    mstrextendf(buf, ">=", stdout);  break;
+      case C2_L_OLT:      mstrextendf(buf, "<",  stdout);  break;
+      case C2_L_OLTEQ:    mstrextendf(buf, "<=",  stdout); break;
     }
 
     if (C2_L_OEXISTS == pleaf->op)
-      return;
+      goto success;
 
     // Print pattern
-    putchar(' ');
+    mstrextend(buf, " ");
     switch (pleaf->ptntype) {
       case C2_L_PTINT:
-        printf("%ld", pleaf->ptnint);
+        mstrextendf(buf, "%ld", pleaf->ptnint);
         break;
       case C2_L_PTSTRING:
         // TODO: Escape string before printing out?
-        printf("\"%s\"", pleaf->ptnstr);
+        mstrextendf(buf, "\"%s\"", pleaf->ptnstr);
         break;
       default:
-        assert(0);
         break;
     }
   }
+  goto success;
+
+success:
+return *buf;
+
+fail:
+free(*buf);
+return NULL;
 }
 
 /**

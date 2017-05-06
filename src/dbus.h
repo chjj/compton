@@ -28,6 +28,9 @@
 #define CDBUS_ERROR_BADWIN_S    "Requested window %#010lx not found."
 #define CDBUS_ERROR_BADTGT      CDBUS_ERROR_PREFIX ".bad_target"
 #define CDBUS_ERROR_BADTGT_S    "Target \"%s\" not found."
+#define CDBUS_ERROR_MISRUL      CDBUS_ERROR_PREFIX ".rule_missing"
+#define CDBUS_ERROR_MISRUL_S    "Rule of argument %d not found: \"%s\"."
+
 #define CDBUS_ERROR_FORBIDDEN   CDBUS_ERROR_PREFIX ".forbidden"
 #define CDBUS_ERROR_FORBIDDEN_S "Incorrect password, access denied."
 #define CDBUS_ERROR_CUSTOM      CDBUS_ERROR_PREFIX ".custom"
@@ -41,6 +44,12 @@ typedef uint32_t cdbus_window_t;
 typedef uint16_t cdbus_enum_t;
 #define CDBUS_TYPE_ENUM         DBUS_TYPE_UINT16
 #define CDBUS_TYPE_ENUM_STR     DBUS_TYPE_UINT16_AS_STRING
+
+typedef double cdbus_double_t;
+#define CDBUS_TYPE_DOUBLE       DBUS_TYPE_DOUBLE
+
+typedef char *cdbus_string_t;
+#define CDBUS_TYPE_STRING       DBUS_TYPE_STRING
 
 static dbus_bool_t
 cdbus_callback_add_timeout(DBusTimeout *timeout, void *data);
@@ -245,6 +254,9 @@ cdbus_process_opts_get(session_t *ps, DBusMessage *msg);
 
 static bool
 cdbus_process_opts_set(session_t *ps, DBusMessage *msg);
+
+static bool
+cdbus_process_dim_rule_update(session_t *ps, DBusMessage *msg);
 
 static bool
 cdbus_process_introspect(session_t *ps, DBusMessage *msg);
