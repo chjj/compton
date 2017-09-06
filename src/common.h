@@ -2403,6 +2403,7 @@ xr_sync_(session_t *ps, Drawable d
       *pfence = XSyncCreateFence(ps->dpy, d, False);
     if (*pfence) {
       Bool triggered = False;
+      (void) triggered; /* Remove warning */
       /* if (XSyncQueryFence(ps->dpy, *pfence, &triggered) && triggered)
         XSyncResetFence(ps->dpy, *pfence); */
       // The fence may fail to be created (e.g. because of died drawable)
