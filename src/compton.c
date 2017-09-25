@@ -1691,6 +1691,9 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   // Dimming the window if needed
   if (w->dim) {
     double dim_opacity = ps->o.inactive_dim;
+    double dim_red = ps->o.inactive_dim_red;
+    double dim_green = ps->o.inactive_dim_green;
+    double dim_blue = ps->o.inactive_dim_blue;
     if (!ps->o.inactive_dim_fixed)
       dim_opacity *= get_opacity_percent(w);
 
@@ -1699,10 +1702,13 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
       case BKEND_XR_GLX_HYBRID:
         {
           unsigned short cval = 0xffff * dim_opacity;
+          unsigned short rval = 0xffff * dim_red;
+          unsigned short gval = 0xffff * dim_green;
+          unsigned short bval = 0xffff * dim_blue;
 
           // Premultiply color
           XRenderColor color = {
-            .red = 0, .green = 0, .blue = 0, .alpha = cval,
+            .red = rval, .green = gval, .blue = bval, .alpha = cval,
           };
 
           XRectangle rect = {
@@ -1718,8 +1724,9 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
         break;
 #ifdef CONFIG_VSYNC_OPENGL
       case BKEND_GLX:
-        glx_dim_dst(ps, x, y, wid, hei, ps->psglx->z - 0.7, dim_opacity,
-            reg_paint, pcache_reg);
+        glx_dim_dst(ps, x, y, wid, hei, ps->psglx->z - 0.7,
+          dim_red, dim_green, dim_blue, dim_opacity,
+          reg_paint, pcache_reg);
         break;
 #endif
     }
@@ -5040,7 +5047,7 @@ parse_matrix(session_t *ps, const char *src, const char **endptr) {
   int wid = 0, hei = 0;
   const char *pc = NULL;
   XFixed *matrix = NULL;
-  
+
   // Get matrix width and height
   {
     double val = 0.0;
@@ -5545,6 +5552,12 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --inactive-opacity-override
   lcfg_lookup_bool(&cfg, "inactive-opacity-override",
       &ps->o.inactive_opacity_override);
+  // --inactive-dim-red
+  config_lookup_float(&cfg, "inactive-dim-red", &ps->o.inactive_dim_red);
+  // --inactive-dim-green
+  config_lookup_float(&cfg, "inactive-dim-green", &ps->o.inactive_dim_green);
+  // --inactive-dim-blue
+  config_lookup_float(&cfg, "inactive-dim-blue", &ps->o.inactive_dim_blue);
   // --inactive-dim
   config_lookup_float(&cfg, "inactive-dim", &ps->o.inactive_dim);
   // --mark-wmwin-focused
@@ -5697,6 +5710,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "shadow-blue", required_argument, NULL, 259 },
     { "inactive-opacity-override", no_argument, NULL, 260 },
     { "inactive-dim", required_argument, NULL, 261 },
+    { "inactive-dim-red", required_argument, NULL, 322 },
+    { "inactive-dim-green", required_argument, NULL, 323 },
+    { "inactive-dim-blue", required_argument, NULL, 324 },
     { "mark-wmwin-focused", no_argument, NULL, 262 },
     { "shadow-exclude", required_argument, NULL, 263 },
     { "mark-ovredir-focused", no_argument, NULL, 264 },
@@ -6029,6 +6045,18 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(319, no_x_selection);
       P_CASEBOOL(731, reredir_on_root_change);
       P_CASEBOOL(732, glx_reinit_on_root_change);
+      case 322:
+        // --shadow-red
+        ps->o.inactive_dim_red = atof(optarg);
+        break;
+      case 323:
+        // --shadow-green
+        ps->o.inactive_dim_green = atof(optarg);
+        break;
+      case 324:
+        // --shadow-blue
+        ps->o.inactive_dim_blue = atof(optarg);
+        break;
       default:
         usage(1);
         break;
@@ -6047,6 +6075,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
   ps->o.shadow_green = normalize_d(ps->o.shadow_green);
   ps->o.shadow_blue = normalize_d(ps->o.shadow_blue);
   ps->o.inactive_dim = normalize_d(ps->o.inactive_dim);
+  ps->o.inactive_dim_red = normalize_d(ps->o.inactive_dim_red);
+  ps->o.inactive_dim_green = normalize_d(ps->o.inactive_dim_green);
+  ps->o.inactive_dim_blue = normalize_d(ps->o.inactive_dim_blue);
   ps->o.frame_opacity = normalize_d(ps->o.frame_opacity);
   ps->o.shadow_opacity = normalize_d(ps->o.shadow_opacity);
   cfgtmp.menu_opacity = normalize_d(cfgtmp.menu_opacity);
