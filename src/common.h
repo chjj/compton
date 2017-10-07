@@ -1228,6 +1228,10 @@ typedef struct _win {
   /// Background state on last paint.
   bool blur_background_last;
 
+  int oldX; int oldY;
+  int newX; int newY;
+  float moveTime;
+
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
   /// Textures and FBO background blur use.
   glx_blur_cache_t glx_blur_cache;

@@ -1103,6 +1103,34 @@ paint_preprocess(session_t *ps, win *list) {
     bool to_paint = true;
     const winmode_t mode_old = w->mode;
 
+    bool posChanged = (w->oldX != -10000 && w->oldY != -10000) &&  (w->a.x != w->newX || w->a.y != w->newY);
+
+    if (posChanged) {
+      float moveD = (get_time_ms() - w->moveTime) / 150;
+      if (moveD >= 1.0) moveD = 1.0;
+
+      float q = pow (moveD, 2.5);
+      float x = (float) w->oldX * (1-q) + (float) w->newX * q;
+      float y = (float) w->oldY * (1-q) + (float) w->newY * q;
+      w->a.x = (int) x;
+      w->a.y = (int) y;
+
+      /* w->need_configure = true; */
+
+      add_damage_win(ps, w);
+      w->to_paint = true;
+      ps->idling = false;
+      /* w->flags = w->flags & WFLAG_SIZE_CHANGE; */
+
+      if (moveD == 1.0) {
+        /* free_paint(ps, &w->shadow_paint); */
+        /* free_region(ps, &w->extents); */
+        /* w->extents = win_extents(ps, w); */
+        /* force_repaint(ps); */
+      }
+    }
+
+
     // In case calling the fade callback function destroys this window
     next = w->next;
     opacity_t opacity_old = w->opacity;
@@ -1151,7 +1179,7 @@ paint_preprocess(session_t *ps, win *list) {
     // to_paint will never change afterward
 
     // Determine mode as early as possible
-    if (to_paint && (!w->to_paint || w->opacity != opacity_old))
+    if (to_paint && (!w->to_paint || w->opacity != opacity_old || !posChanged))
       win_determine_mode(ps, w);
 
     if (to_paint) {
@@ -1839,6 +1867,7 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
   reg_tmp2 = XFixesCreateRegion(ps->dpy, NULL, 0);
 
   for (win *w = t; w; w = w->prev_trans) {
+
     // Painting shadow
     if (w->shadow) {
       // Lazy shadow building
@@ -1927,9 +1956,10 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
         reg_paint = region;
     }
 
+    reg_paint = region;
     {
       reg_data_t cache_reg = REG_DATA_INIT;
-      if (!is_region_empty(ps, reg_paint, &cache_reg)) {
+      if (!is_region_empty(ps, reg_paint, &cache_reg) || true) {
         set_tgt_clip(ps, reg_paint, &cache_reg);
         // Blur window background
         if (w->blur_background && (!win_is_solid(ps, w)
@@ -2916,6 +2946,8 @@ add_win(session_t *ps, Window id, Window prev) {
     .invert_color_force = UNSET,
 
     .blur_background = false,
+    .oldX = -10000,
+    .oldY = -10000,
   };
 
   // Reject overlay window and already added windows
@@ -3117,6 +3149,20 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
   if (!w)
     return;
 
+  if (w->oldX == -10000 && w->oldY == -10000) {
+    w->a.x  = ce->x;
+    w->a.y  = ce->y;
+    w->oldX = ce->x;
+    w->oldY = ce->y;
+    w->moveTime = get_time_ms();
+  } else if (w->newX == w->a.x && w->newY == w->a.y) {
+    w->oldX = w->a.x;
+    w->oldY = w->a.y;
+    w->moveTime = get_time_ms();
+  }
+  w->newX = ce->x;
+  w->newY = ce->y;
+
   if (w->a.map_state == IsUnmapped) {
     /* save the configure event for when the window maps */
     w->need_configure = true;
@@ -3148,9 +3194,6 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
       free_region(ps, &w->extents);
       free_region(ps, &w->border_size);
     }
-
-    w->a.x = ce->x;
-    w->a.y = ce->y;
 
     if (w->a.width != ce->width || w->a.height != ce->height
         || w->a.border_width != ce->border_width)
