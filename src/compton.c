@@ -7070,7 +7070,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .backend = BKEND_XRENDER,
       .glx_no_stencil = false,
       .glx_copy_from_front = false,
-      .transition_length = 150,
+      .transition_length = 300,
       .transition_pow_x = 1.5,
       .transition_pow_y = 1.5,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
