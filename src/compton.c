@@ -3275,6 +3275,9 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
       w->newY = ce->y;
       w->newW = ce->width;
       w->newH = ce->height;
+
+      if (ps->o.no_scale_down && w->newW < w->oldW) { w->oldW = w->newW; }
+      if (ps->o.no_scale_down && w->newH < w->oldH) { w->oldH = w->newH; }
     }
   }
 
@@ -5676,6 +5679,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   lcfg_lookup_bool(&cfg, "spawn-center-screen", &ps->o.spawn_center_screen);
   // --spawn-center
   lcfg_lookup_bool(&cfg, "spawn-center", &ps->o.spawn_center);
+  // --no-scale-down
+  lcfg_lookup_bool(&cfg, "no-scale-down", &ps->o.no_scale_down);
   // -r (shadow_radius)
   lcfg_lookup_int(&cfg, "shadow-radius", &ps->o.shadow_radius);
   // -o (shadow_opacity)
@@ -7156,6 +7161,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .transition_pow_w = 1.5,
       .transition_pow_h = 1.5,
       .size_transition = true,
+      .no_scale_down = false,
       .spawn_center_screen = false,
       .spawn_center = true,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
