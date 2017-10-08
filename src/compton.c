@@ -1129,7 +1129,7 @@ paint_preprocess(session_t *ps, win *list) {
       float W = (float) w->oldW * (1-g) + (float) w->newW * g;
       float h = (float) w->oldH * (1-z) + (float) w->newH * z;
 
-      /* add_damage_win(ps, w); */
+      add_damage_win(ps, w);
       w->a.x = (int) x;
       w->a.y = (int) y;
       if (ps->o.size_transition) {
@@ -1137,51 +1137,19 @@ paint_preprocess(session_t *ps, win *list) {
         w->a.height = (int) h;
       }
 
-    XserverRegion damage = None;
-    bool factor_change = false;
-
-    // Windows restack (including window restacks happened when this
-    // window is not mapped) could mess up all reg_ignore
-    ps->reg_ignore_expire = true;
-
-    w->need_configure = false;
-
-    damage = XFixesCreateRegion(ps->dpy, 0, 0);
-    if (w->extents != None) {
-      XFixesCopyRegion(ps->dpy, damage, w->extents);
-    }
-
-    // If window geometry did not change, don't free extents here
-    if (true) {
-      factor_change = true;
       free_region(ps, &w->extents);
       free_region(ps, &w->border_size);
-    }
 
-    if (true)
-      free_wpaint(ps, w);
+      if (true) {
+        calc_win_size(ps, w);
 
-    if (true) {
-      calc_win_size(ps, w);
+        // Rounded corner detection is affected by window size
+        if (ps->shape_exists && ps->o.shadow_ignore_shaped
+            && ps->o.detect_rounded_corners && w->bounding_shaped)
+          win_update_shape(ps, w);
+      }
 
-      // Rounded corner detection is affected by window size
-      if (ps->shape_exists && ps->o.shadow_ignore_shaped
-          && ps->o.detect_rounded_corners && w->bounding_shaped)
-        win_update_shape(ps, w);
-    }
-
-    if (damage) {
-      XserverRegion extents = win_extents(ps, w);
-      XFixesUnionRegion(ps->dpy, damage, damage, extents);
-      XFixesDestroyRegion(ps->dpy, extents);
-      add_damage(ps, damage);
-    }
-
-    if (factor_change) {
-      cxinerama_win_upd_scr(ps, w);
-      win_on_factor_change(ps, w);
-    }
-
+      add_damage_win(ps, w);
       w->mode = WMODE_ARGB;
       ps->idling = false;
     }
