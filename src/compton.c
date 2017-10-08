@@ -1119,8 +1119,8 @@ paint_preprocess(session_t *ps, win *list) {
 
       float q = pow (moveDx, ps->o.transition_pow_x);
       float k = pow (moveDy, ps->o.transition_pow_y);
-      float g = pow (moveDw, ps->o.transition_pow_x);
-      float z = pow (moveDh, ps->o.transition_pow_y);
+      float g = pow (moveDw, ps->o.transition_pow_w);
+      float z = pow (moveDh, ps->o.transition_pow_h);
 
       float x = (float) w->oldX * (1-q) + (float) w->newX * q;
       float y = (float) w->oldY * (1-k) + (float) w->newY * k;
