@@ -1138,6 +1138,7 @@ paint_preprocess(session_t *ps, win *list) {
       /* } */
 
       /* w->to_paint = true; */
+      w->mode = WMODE_ARGB;
       ps->idling = false;
     }
 
