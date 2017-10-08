@@ -9,6 +9,7 @@ It adds the following options:
 * `transition-pow-w`  animation easing on the window width  (default: 1.5)
 * `transition-pow-h`  animation easing on the window height (default: 1.5)
 * `size-transition`   whether to animate window size changes (default: true)
+* `spawn-center`      whether to animate new windows from the center of the screen (default: true)
 
 And break these:
 * `clear-shadow`

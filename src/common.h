@@ -580,6 +580,8 @@ typedef struct _options_t {
   float transition_pow_h;
   /// Wether to animate on window size change
   bool size_transition;
+  /// Wether to animate on window size change
+  bool spawn_center;
   /// GLX swap method we assume OpenGL uses.
   int glx_swap_method;
   /// Whether to use GL_EXT_gpu_shader4 to (hopefully) accelerates blurring.

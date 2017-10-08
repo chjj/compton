@@ -1135,8 +1135,6 @@ paint_preprocess(session_t *ps, win *list) {
         w->a.height = (int) h;
       }
 
-      /* printf("%d, %d - %d, %d\n", w->oldW, w->oldH, w->a.width, w->a.height); */
-
       if (w->shadow) {
         free_region(ps, &w->extents);
         w->extents = win_extents(ps, w);
@@ -2322,6 +2320,10 @@ finish_unmap_win(session_t *ps, win *w) {
   w->damaged = false;
 
   w->in_openclose = false;
+  w->oldX = -10000;
+  w->oldY = -10000;
+  w->oldW = 0;
+  w->oldH = 0;
 
 
   update_reg_ignore_expire(ps, w);
@@ -3193,8 +3195,13 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
 
   float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
-    w->oldX = w->a.x;
-    w->oldY = w->a.y;
+    if (ps->o.spawn_center) {
+      w->oldX = ps->root_width/2;
+      w->oldY = ps->root_height/2;
+    } else {
+      w->oldX = ce->x;
+      w->oldY = ce->y;
+    }
     w->oldW = w->a.width;
     w->oldH = w->a.height;
     w->newX = ce->x;
@@ -5661,6 +5668,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
     ps->o.transition_pow_h = dval;
   // --size-transition
   lcfg_lookup_bool(&cfg, "size-transition", &ps->o.size_transition);
+  // --spawn-center
+  lcfg_lookup_bool(&cfg, "spawn-center", &ps->o.spawn_center);
   // -r (shadow_radius)
   lcfg_lookup_int(&cfg, "shadow-radius", &ps->o.shadow_radius);
   // -o (shadow_opacity)
@@ -7141,6 +7150,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .transition_pow_w = 1.5,
       .transition_pow_h = 1.5,
       .size_transition = true,
+      .spawn_center = true,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
       .glx_prog_win = GLX_PROG_MAIN_INIT,
 #endif
