@@ -1106,29 +1106,37 @@ paint_preprocess(session_t *ps, win *list) {
     bool posChanged = (w->oldX != -10000 && w->oldY != -10000) &&  (w->a.x != w->newX || w->a.y != w->newY);
 
     if (posChanged) {
-      float moveD = (get_time_ms() - w->moveTime) / 150;
+      float moveD = (get_time_ms() - w->moveTime) / ps->o.transition_length;
       if (moveD >= 1.0) moveD = 1.0;
 
-      float q = pow (moveD, 2.5);
+      float q = pow (moveD, ps->o.transition_pow_x);
+      float k = pow (moveD, ps->o.transition_pow_y);
       float x = (float) w->oldX * (1-q) + (float) w->newX * q;
-      float y = (float) w->oldY * (1-q) + (float) w->newY * q;
+      float y = (float) w->oldY * (1-k) + (float) w->newY * k;
+
+      add_damage_win(ps, w);
       w->a.x = (int) x;
       w->a.y = (int) y;
 
-      /* w->need_configure = true; */
-
+      /* if (w->shadow) { */
+        free_region(ps, &w->extents);
+        w->extents = win_extents(ps, w);
+      /* } */
       add_damage_win(ps, w);
+
       w->to_paint = true;
-      ps->idling = false;
+      /* w->need_configure = true; */
       /* w->flags = w->flags & WFLAG_SIZE_CHANGE; */
 
       if (moveD == 1.0) {
-        /* free_paint(ps, &w->shadow_paint); */
         /* free_region(ps, &w->extents); */
+        /* w->shadow_paint.pixmap = false; */
         /* w->extents = win_extents(ps, w); */
+        /* free_paint(ps, &w->shadow_paint); */
         /* force_repaint(ps); */
       }
     }
+    ps->idling = false;
 
 
     // In case calling the fade callback function destroys this window
@@ -1179,7 +1187,7 @@ paint_preprocess(session_t *ps, win *list) {
     // to_paint will never change afterward
 
     // Determine mode as early as possible
-    if (to_paint && (!w->to_paint || w->opacity != opacity_old || !posChanged))
+    if (to_paint && (!w->to_paint || w->opacity != opacity_old))
       win_determine_mode(ps, w);
 
     if (to_paint) {
@@ -2182,6 +2190,7 @@ map_win(session_t *ps, Window id) {
   printf_dbgf("(%#010lx \"%s\"): %p\n", id, (w ? w->name: NULL), w);
 #endif
 
+
   // Don't care about window mapping if it's an InputOnly window
   // Try avoiding mapping a window twice
   if (!w || InputOnly == w->a.class
@@ -2191,6 +2200,8 @@ map_win(session_t *ps, Window id) {
   assert(!win_is_focused_real(ps, w));
 
   w->a.map_state = IsViewable;
+  w->oldX = -10000;
+  w->oldY = -10000;
 
   cxinerama_win_upd_scr(ps, w);
 
@@ -2284,6 +2295,7 @@ finish_unmap_win(session_t *ps, win *w) {
   w->damaged = false;
 
   w->in_openclose = false;
+
 
   update_reg_ignore_expire(ps, w);
 
@@ -2946,6 +2958,7 @@ add_win(session_t *ps, Window id, Window prev) {
     .invert_color_force = UNSET,
 
     .blur_background = false,
+
     .oldX = -10000,
     .oldY = -10000,
   };
@@ -5540,6 +5553,15 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // -O (fade_out_step)
   if (config_lookup_float(&cfg, "fade-out-step", &dval))
     ps->o.fade_out_step = normalize_d(dval) * OPAQUE;
+  // --transition-length
+  if (lcfg_lookup_int(&cfg, "transition-length", &ival))
+    ps->o.transition_length = ival;
+  // --transition-pow-x
+  if (config_lookup_float(&cfg, "transition-pow-x", &dval))
+    ps->o.transition_pow_x = dval;
+  // --transition-pow-y
+  if (config_lookup_float(&cfg, "transition-pow-y", &dval))
+    ps->o.transition_pow_y = dval;
   // -r (shadow_radius)
   lcfg_lookup_int(&cfg, "shadow-radius", &ps->o.shadow_radius);
   // -o (shadow_opacity)
@@ -7014,6 +7036,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .backend = BKEND_XRENDER,
       .glx_no_stencil = false,
       .glx_copy_from_front = false,
+      .transition_length = 150,
+      .transition_pow_x = 1.5,
+      .transition_pow_y = 1.5,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
       .glx_prog_win = GLX_PROG_MAIN_INIT,
 #endif

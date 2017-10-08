@@ -568,6 +568,12 @@ typedef struct _options_t {
   bool glx_use_copysubbuffermesa;
   /// Whether to avoid rebinding pixmap on window damage.
   bool glx_no_rebind_pixmap;
+  /// Length of window transitions
+  int transition_length;
+  /// For smoothing on the x-coordinate of window animations
+  float transition_pow_x;
+  /// For smoothing on the y-coordinate of window animations
+  float transition_pow_y;
   /// GLX swap method we assume OpenGL uses.
   int glx_swap_method;
   /// Whether to use GL_EXT_gpu_shader4 to (hopefully) accelerates blurring.
