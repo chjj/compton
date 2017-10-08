@@ -1130,8 +1130,10 @@ paint_preprocess(session_t *ps, win *list) {
       add_damage_win(ps, w);
       w->a.x = (int) x;
       w->a.y = (int) y;
-      w->a.width  = (int) W;
-      w->a.height = (int) h;
+      if (ps->o.size_transition) {
+        w->a.width  = (int) W;
+        w->a.height = (int) h;
+      }
 
       /* printf("%d, %d - %d, %d\n", w->oldW, w->oldH, w->a.width, w->a.height); */
 
