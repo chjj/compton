@@ -1105,11 +1105,14 @@ paint_preprocess(session_t *ps, win *list) {
 
     bool posChanged = (w->oldX != -10000 && w->oldY != -10000) &&  (w->a.x != w->newX || w->a.y != w->newY);
     if (posChanged) {
-      float moveD = (get_time_ms() - w->moveTime) / ps->o.transition_length;
-      if (moveD >= 1.0) moveD = 1.0;
+      float t      = get_time_ms();
+      float moveDx = (t - w->moveTimeX) / ps->o.transition_length;
+      float moveDy = (t - w->moveTimeY) / ps->o.transition_length;
+      if (moveDx >= 1.0) moveDx = 1.0;
+      if (moveDy >= 1.0) moveDy = 1.0;
 
-      float q = pow (moveD, ps->o.transition_pow_x);
-      float k = pow (moveD, ps->o.transition_pow_y);
+      float q = pow (moveDx, ps->o.transition_pow_x);
+      float k = pow (moveDy, ps->o.transition_pow_y);
       float x = (float) w->oldX * (1-q) + (float) w->newX * q;
       float y = (float) w->oldY * (1-k) + (float) w->newY * k;
 
@@ -1126,13 +1129,13 @@ paint_preprocess(session_t *ps, win *list) {
       /* w->need_configure = true; */
       /* w->flags = w->flags & WFLAG_SIZE_CHANGE; */
 
-      if (moveD == 1.0) {
+      /* if (moveD == 1.0) { */
         /* free_region(ps, &w->extents); */
         /* w->shadow_paint.pixmap = false; */
         /* w->extents = win_extents(ps, w); */
         /* free_paint(ps, &w->shadow_paint); */
         /* force_repaint(ps); */
-      }
+      /* } */
 
       /* w->to_paint = true; */
       ps->idling = false;
@@ -3162,44 +3165,41 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
   if (!w)
     return;
 
+  float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000) {
     w->oldX = w->a.x;
     w->oldY = w->a.y;
     w->newX = ce->x;
     w->newY = ce->y;
-    w->moveTime = get_time_ms();
+    w->moveTimeX = t;
+    w->moveTimeY = t;
   } else {
     if (w->newX == w->a.x && w->newY == w->a.y) {
       w->oldX = w->a.x;
       w->oldY = w->a.y;
-      w->moveTime = get_time_ms();
+      w->moveTimeX = t;
+      w->moveTimeY = t;
     }
     if (w->newX != ce->x || w->newY != ce->y) {
       float t     = get_time_ms();
-      float moveD = ((float) t - w->moveTime) / ps->o.transition_length;
+      float moveDx = ((float) t - w->moveTimeX) / ps->o.transition_length;
+      float moveDy = ((float) t - w->moveTimeY) / ps->o.transition_length;
 
-      // If in the middle of a transition, calculate how long
-      // the animation would have had to run for for our current
-      // position to have been obtained from the new animation
-      // TODO: still causes jumpiness if moving in more than one direction!
-      if (w->moveTime != 0.0 && moveD < 1.0) {
-        float oldMoveD;
-        if (w->oldX == w->newX) {
-          oldMoveD = pow( (float) (w->newY - w->a.y) / (float) (w->newY - ce->y)
-                        , 1 / ps->o.transition_pow_y);
-        } else {
-          oldMoveD = pow( (float) (w->newX - w->a.x) / (float) (w->newX - ce->x)
-                        , 1 / ps->o.transition_pow_y);
-        }
-        float fakeT = (t - oldMoveD * (float) ps->o.transition_length);
-        /* printf("%f\n", fakeT); */
-        if (isnanf(fakeT)) {
-          w->moveTime = t;
-        } else {
-          w->moveTime = fakeT;
-        }
+      if (w->moveTimeX != 0.0 && moveDx < 1.0 && w->oldX != w->newX) {
+        float oldMoveDx = pow((float) (w->newX - w->a.x) / (float) (w->newX - ce->x), 1 / ps->o.transition_pow_x);
+        float fakeT     = (t - oldMoveDx * (float) ps->o.transition_length);
+        /* printf("X: %f,%f\n", fakeT, t); */
+        w->moveTimeX    = isnanf(fakeT)? t : fakeT;
       } else {
-        w->moveTime = t;
+        w->moveTimeX    = t;
+      }
+      if (w->moveTimeY != 0.0 && moveDy < 1.0 && w->oldY != w->newY) {
+        float oldMoveDy = pow((float) (w->newY - w->a.y) / (float) (w->newY - ce->y), 1 / ps->o.transition_pow_y);
+        float fakeT     = (t - oldMoveDy * (float) ps->o.transition_length);
+        /* printf("Y: %f,%f\n", fakeT, t); */
+        w->moveTimeY    = isnanf(fakeT)? t : fakeT;
+      } else {
+        w->moveTimeY    = t;
       }
 
       w->oldX = w->newX;
