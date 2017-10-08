@@ -927,8 +927,10 @@ win_extents(session_t *ps, win *w) {
 
   r.x = w->a.x;
   r.y = w->a.y;
-  r.width = w->widthb;
-  r.height = w->heightb;
+  /* r.width = w->widthb; */
+  /* r.height = w->heightb; */
+  r.width = w->a.width;
+  r.height = w->a.height; //TODO
 
   if (w->shadow) {
     XRectangle sr;
@@ -1127,7 +1129,7 @@ paint_preprocess(session_t *ps, win *list) {
       float W = (float) w->oldW * (1-g) + (float) w->newW * g;
       float h = (float) w->oldH * (1-z) + (float) w->newH * z;
 
-      add_damage_win(ps, w);
+      /* add_damage_win(ps, w); */
       w->a.x = (int) x;
       w->a.y = (int) y;
       if (ps->o.size_transition) {
@@ -1135,28 +1137,54 @@ paint_preprocess(session_t *ps, win *list) {
         w->a.height = (int) h;
       }
 
-      if (w->shadow) {
-        free_region(ps, &w->extents);
-        w->extents = win_extents(ps, w);
-      }
-      add_damage_win(ps, w);
+    XserverRegion damage = None;
+    bool factor_change = false;
 
-      /* w->need_configure = true; */
-      /* w->flags = w->flags & WFLAG_SIZE_CHANGE; */
+    // Windows restack (including window restacks happened when this
+    // window is not mapped) could mess up all reg_ignore
+    ps->reg_ignore_expire = true;
 
-      /* if (moveD == 1.0) { */
-        /* free_region(ps, &w->extents); */
-        /* w->shadow_paint.pixmap = false; */
-        /* w->extents = win_extents(ps, w); */
-        /* free_paint(ps, &w->shadow_paint); */
-        /* force_repaint(ps); */
-      /* } */
+    w->need_configure = false;
 
-      /* w->to_paint = true; */
+    damage = XFixesCreateRegion(ps->dpy, 0, 0);
+    if (w->extents != None) {
+      XFixesCopyRegion(ps->dpy, damage, w->extents);
+    }
+
+    // If window geometry did not change, don't free extents here
+    if (true) {
+      factor_change = true;
+      free_region(ps, &w->extents);
+      free_region(ps, &w->border_size);
+    }
+
+    if (true)
+      free_wpaint(ps, w);
+
+    if (true) {
+      calc_win_size(ps, w);
+
+      // Rounded corner detection is affected by window size
+      if (ps->shape_exists && ps->o.shadow_ignore_shaped
+          && ps->o.detect_rounded_corners && w->bounding_shaped)
+        win_update_shape(ps, w);
+    }
+
+    if (damage) {
+      XserverRegion extents = win_extents(ps, w);
+      XFixesUnionRegion(ps->dpy, damage, damage, extents);
+      XFixesDestroyRegion(ps->dpy, extents);
+      add_damage(ps, damage);
+    }
+
+    if (factor_change) {
+      cxinerama_win_upd_scr(ps, w);
+      win_on_factor_change(ps, w);
+    }
+
       w->mode = WMODE_ARGB;
       ps->idling = false;
     }
-
 
     // In case calling the fade callback function destroys this window
     next = w->next;
@@ -1990,7 +2018,7 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
     reg_paint = region;
     {
       reg_data_t cache_reg = REG_DATA_INIT;
-      if (!is_region_empty(ps, reg_paint, &cache_reg) || true) {
+      if (!is_region_empty(ps, reg_paint, &cache_reg)) {
         set_tgt_clip(ps, reg_paint, &cache_reg);
         // Blur window background
         if (w->blur_background && (!win_is_solid(ps, w)
@@ -2229,7 +2257,6 @@ map_win(session_t *ps, Window id) {
     w->oldY = -10000;
     w->oldW = 0;
     w->oldH = 0;
-  } else {
   }
 
   cxinerama_win_upd_scr(ps, w);
@@ -3200,8 +3227,6 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
 
   float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
-    printf(w->isOld? "old\n": "new\n");
-    printf("%d, %d, %d, %d\n", w->oldX, w->oldY, w->oldW, w->oldH);
     if (!w->isOld) {
       /* w->isOld = true; */
 
@@ -3210,19 +3235,16 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
         w->oldY = ps->root_height/2;
         w->oldW = 1;
         w->oldH = 1;
-        printf("lorem\n");
       } else if (ps->o.spawn_center) {
         w->oldX = ce->x + ce->width/2;
         w->oldY = ce->y + ce->height/2;
         w->oldW = 1;
         w->oldH = 1;
-        printf("ipsum\n");
       } else {
         w->oldX = ce->x;
         w->oldY = ce->y;
         w->oldW = ce->width;
         w->oldH = ce->height;
-        printf("dolor\n");
       }
     } else {
         w->oldX = ce->x;

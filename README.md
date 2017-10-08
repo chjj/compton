@@ -12,6 +12,3 @@ It adds the following options:
 * `spawn-center-screen` whether to animate new windows from the center of the screen (default: false)
 * `spawn-center`        whether to animate new windows from their own center (default: true)
 * `no-scale-down`       Whether to animate down scaling (some programs handle this poorly) (default: false)
-
-And break these:
-* `clear-shadow`
