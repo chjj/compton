@@ -1135,8 +1135,9 @@ paint_preprocess(session_t *ps, win *list) {
         /* free_paint(ps, &w->shadow_paint); */
         /* force_repaint(ps); */
       }
+
+      ps->idling = false;
     }
-    ps->idling = false;
 
 
     // In case calling the fade callback function destroys this window
