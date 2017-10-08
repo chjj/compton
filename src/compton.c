@@ -1104,7 +1104,6 @@ paint_preprocess(session_t *ps, win *list) {
     const winmode_t mode_old = w->mode;
 
     bool posChanged = (w->oldX != -10000 && w->oldY != -10000) &&  (w->a.x != w->newX || w->a.y != w->newY);
-
     if (posChanged) {
       float moveD = (get_time_ms() - w->moveTime) / ps->o.transition_length;
       if (moveD >= 1.0) moveD = 1.0;
@@ -1118,13 +1117,12 @@ paint_preprocess(session_t *ps, win *list) {
       w->a.x = (int) x;
       w->a.y = (int) y;
 
-      /* if (w->shadow) { */
+      if (w->shadow) {
         free_region(ps, &w->extents);
         w->extents = win_extents(ps, w);
-      /* } */
+      }
       add_damage_win(ps, w);
 
-      w->to_paint = true;
       /* w->need_configure = true; */
       /* w->flags = w->flags & WFLAG_SIZE_CHANGE; */
 
@@ -1136,6 +1134,7 @@ paint_preprocess(session_t *ps, win *list) {
         /* force_repaint(ps); */
       }
 
+      /* w->to_paint = true; */
       ps->idling = false;
     }
 
@@ -3164,50 +3163,50 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
     return;
 
   if (w->oldX == -10000 && w->oldY == -10000) {
-    w->a.x  = ce->x;
-    w->a.y  = ce->y;
-    w->oldX = ce->x;
-    w->oldY = ce->y;
-    w->newX = ce->x;
-    w->newY = ce->y;
-    w->moveTime = get_time_ms();
-  } else if (w->newX == w->a.x && w->newY == w->a.y) {
     w->oldX = w->a.x;
     w->oldY = w->a.y;
-    w->moveTime = get_time_ms();
-  }
-  if (w->newX != ce->x || w->newY != ce->y) {
-    float t     = get_time_ms();
-    float moveD = ((float) t - w->moveTime) / ps->o.transition_length;
-
-    // If in the middle of a transition, calculate how long
-    // the animation would have had to run for for our current
-    // position to have been obtained from the new animation
-    // TODO: still causes jumpiness if moving in more than one direction!
-    if (w->moveTime != 0.0 && moveD < 1.0) {
-      float oldMoveD;
-      if (w->oldX == w->newX) {
-        oldMoveD = pow( (float) (w->newY - w->a.y) / (float) (w->newY - ce->y)
-                      , 1 / ps->o.transition_pow_y);
-      } else {
-        oldMoveD = pow( (float) (w->newX - w->a.x) / (float) (w->newX - ce->x)
-                      , 1 / ps->o.transition_pow_y);
-      }
-      float fakeT = (t - oldMoveD * (float) ps->o.transition_length);
-      /* printf("%f\n", fakeT); */
-      if (isnanf(fakeT)) {
-        w->moveTime = t;
-      } else {
-        w->moveTime = fakeT;
-      }
-    } else {
-      w->moveTime = t;
-    }
-
-    w->oldX = w->newX;
-    w->oldY = w->newY;
     w->newX = ce->x;
     w->newY = ce->y;
+    w->moveTime = get_time_ms();
+  } else {
+    if (w->newX == w->a.x && w->newY == w->a.y) {
+      w->oldX = w->a.x;
+      w->oldY = w->a.y;
+      w->moveTime = get_time_ms();
+    }
+    if (w->newX != ce->x || w->newY != ce->y) {
+      float t     = get_time_ms();
+      float moveD = ((float) t - w->moveTime) / ps->o.transition_length;
+
+      // If in the middle of a transition, calculate how long
+      // the animation would have had to run for for our current
+      // position to have been obtained from the new animation
+      // TODO: still causes jumpiness if moving in more than one direction!
+      if (w->moveTime != 0.0 && moveD < 1.0) {
+        float oldMoveD;
+        if (w->oldX == w->newX) {
+          oldMoveD = pow( (float) (w->newY - w->a.y) / (float) (w->newY - ce->y)
+                        , 1 / ps->o.transition_pow_y);
+        } else {
+          oldMoveD = pow( (float) (w->newX - w->a.x) / (float) (w->newX - ce->x)
+                        , 1 / ps->o.transition_pow_y);
+        }
+        float fakeT = (t - oldMoveD * (float) ps->o.transition_length);
+        /* printf("%f\n", fakeT); */
+        if (isnanf(fakeT)) {
+          w->moveTime = t;
+        } else {
+          w->moveTime = fakeT;
+        }
+      } else {
+        w->moveTime = t;
+      }
+
+      w->oldX = w->newX;
+      w->oldY = w->newY;
+      w->newX = ce->x;
+      w->newY = ce->y;
+    }
   }
 
   if (w->a.map_state == IsUnmapped) {
