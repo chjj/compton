@@ -2223,10 +2223,14 @@ map_win(session_t *ps, Window id) {
   assert(!win_is_focused_real(ps, w));
 
   w->a.map_state = IsViewable;
-  w->oldX = -10000;
-  w->oldY = -10000;
-  w->oldW = 0;
-  w->oldH = 0;
+
+  if (!w->isOld) {
+    w->oldX = -10000;
+    w->oldY = -10000;
+    w->oldW = 0;
+    w->oldH = 0;
+  } else {
+  }
 
   cxinerama_win_upd_scr(ps, w);
 
@@ -2318,6 +2322,7 @@ finish_map_win(session_t *ps, win *w) {
 static void
 finish_unmap_win(session_t *ps, win *w) {
   w->damaged = false;
+  w->isOld = true;
 
   w->in_openclose = false;
   /* w->oldX = -10000; */
@@ -3195,24 +3200,29 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
 
   float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
+    printf(w->isOld? "old\n": "new\n");
+    printf("%d, %d, %d, %d\n", w->oldX, w->oldY, w->oldW, w->oldH);
     if (!w->isOld) {
-      w->isOld = true;
+      /* w->isOld = true; */
 
       if (ps->o.spawn_center_screen) {
         w->oldX = ps->root_width/2;
         w->oldY = ps->root_height/2;
         w->oldW = 1;
         w->oldH = 1;
+        printf("lorem\n");
       } else if (ps->o.spawn_center) {
         w->oldX = ce->x + ce->width/2;
         w->oldY = ce->y + ce->height/2;
         w->oldW = 1;
         w->oldH = 1;
+        printf("ipsum\n");
       } else {
         w->oldX = ce->x;
         w->oldY = ce->y;
         w->oldW = ce->width;
         w->oldH = ce->height;
+        printf("dolor\n");
       }
     } else {
         w->oldX = ce->x;
