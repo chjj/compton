@@ -2223,10 +2223,10 @@ map_win(session_t *ps, Window id) {
   assert(!win_is_focused_real(ps, w));
 
   w->a.map_state = IsViewable;
-  w->oldX = -10000;
-  w->oldY = -10000;
-  w->oldW = 0;
-  w->oldH = 0;
+  /* w->oldX = -10000; */
+  /* w->oldY = -10000; */
+  /* w->oldW = 0; */
+  /* w->oldH = 0; */
 
   cxinerama_win_upd_scr(ps, w);
 
@@ -2320,10 +2320,10 @@ finish_unmap_win(session_t *ps, win *w) {
   w->damaged = false;
 
   w->in_openclose = false;
-  w->oldX = -10000;
-  w->oldY = -10000;
-  w->oldW = 0;
-  w->oldH = 0;
+  /* w->oldX = -10000; */
+  /* w->oldY = -10000; */
+  /* w->oldW = 0; */
+  /* w->oldH = 0; */
 
 
   update_reg_ignore_expire(ps, w);
