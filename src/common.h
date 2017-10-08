@@ -584,6 +584,8 @@ typedef struct _options_t {
   bool spawn_center_screen;
   /// Wether to scale new windows in from their center
   bool spawn_center;
+  /// Does not animate downscaling
+  bool no_scale_down;
   /// GLX swap method we assume OpenGL uses.
   int glx_swap_method;
   /// Whether to use GL_EXT_gpu_shader4 to (hopefully) accelerates blurring.
