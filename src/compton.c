@@ -3238,7 +3238,7 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
         w->moveTimeY    = t;
       }
       if (w->moveTimeW != 0.0 && moveDw < 1.0 && w->oldW != w->newW) {
-        float oldMoveDw = pow((float) (w->newW - w->a.width) / (float) (w->newW - ce->width), 1 / ps->o.transition_pow_x);
+        float oldMoveDw = pow((float) (w->newW - w->a.width) / (float) (w->newW - ce->width), 1 / ps->o.transition_pow_w);
         float fakeT     = (t - oldMoveDw * (float) ps->o.transition_length);
         /* printf("Y: %f,%f\n", fakeT, t); */
         w->moveTimeW    = isnanf(fakeT)? t : fakeT;
@@ -3246,7 +3246,7 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
         w->moveTimeW    = t;
       }
       if (w->moveTimeH != 0.0 && moveDh < 1.0 && w->oldH != w->newH) {
-        float oldMoveDh = pow((float) (w->newH - w->a.height) / (float) (w->newH - ce->height), 1 / ps->o.transition_pow_y);
+        float oldMoveDh = pow((float) (w->newH - w->a.height) / (float) (w->newH - ce->height), 1 / ps->o.transition_pow_h);
         float fakeT     = (t - oldMoveDh * (float) ps->o.transition_length);
         /* printf("Y: %f,%f\n", fakeT, t); */
         w->moveTimeH    = isnanf(fakeT)? t : fakeT;
@@ -5651,6 +5651,14 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --transition-pow-y
   if (config_lookup_float(&cfg, "transition-pow-y", &dval))
     ps->o.transition_pow_y = dval;
+  // --transition-pow-w
+  if (config_lookup_float(&cfg, "transition-pow-w", &dval))
+    ps->o.transition_pow_w = dval;
+  // --transition-pow-h
+  if (config_lookup_float(&cfg, "transition-pow-h", &dval))
+    ps->o.transition_pow_h = dval;
+  // --size-transition
+  lcfg_lookup_bool(&cfg, "size-transition", &ps->o.size_transition);
   // -r (shadow_radius)
   lcfg_lookup_int(&cfg, "shadow-radius", &ps->o.shadow_radius);
   // -o (shadow_opacity)
@@ -7128,6 +7136,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .transition_length = 300,
       .transition_pow_x = 1.5,
       .transition_pow_y = 1.5,
+      .transition_pow_w = 1.5,
+      .transition_pow_h = 1.5,
+      .size_transition = true,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
       .glx_prog_win = GLX_PROG_MAIN_INIT,
 #endif
