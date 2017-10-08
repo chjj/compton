@@ -1,4 +1,4 @@
-This is a fork of [Compton](https://github.com/chjj/compton) that adds animated window transitions.
+This is a fork of [Compton](https://github.com/chjj/compton) that adds animated window transitions. It is intended for tiling window managers, but may be useful to people who use a mouse as well.
 
 Video: https://youtu.be/eKwPkiACqF0
 
