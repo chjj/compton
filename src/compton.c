@@ -449,8 +449,10 @@ make_shadow(session_t *ps, double opacity,
  */
 static bool
 win_build_shadow(session_t *ps, win *w, double opacity) {
-  const int width = w->widthb;
-  const int height = w->heightb;
+  /* const int width = w->widthb; */
+  /* const int height = w->heightb; */
+  const int width = w->newW; // TODO!
+  const int height = w->newH;
 
   XImage *shadow_image = NULL;
   Pixmap shadow_pixmap = None, shadow_pixmap_argb = None;
