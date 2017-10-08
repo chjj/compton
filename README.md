@@ -4,8 +4,8 @@ Video: https://youtu.be/eKwPkiACqF0
 
 It adds the following options:
 * `transition-length` length of animation in milliseconds  (default: 300)
-* `transition-pow-x`  animation easing on the x-coordinate (default: 1.5)
-* `transition-pow-y`  animation easing on the y-coordinate (default: 1.5)
+* `transition-pow-x`  animation easing on the x-axis (default: 1.5)
+* `transition-pow-y`  animation easing on the y-axis (default: 1.5)
 
 And break these:
 * `clear-shadow`
