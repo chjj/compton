@@ -1250,6 +1250,7 @@ typedef struct _win {
   int newX; int newY; int newW; int newH;
   float moveTimeX; float moveTimeY;
   float moveTimeW; float moveTimeH;
+  bool isOld;
 
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
   /// Textures and FBO background blur use.

@@ -2223,10 +2223,10 @@ map_win(session_t *ps, Window id) {
   assert(!win_is_focused_real(ps, w));
 
   w->a.map_state = IsViewable;
-  /* w->oldX = -10000; */
-  /* w->oldY = -10000; */
-  /* w->oldW = 0; */
-  /* w->oldH = 0; */
+  w->oldX = -10000;
+  w->oldY = -10000;
+  w->oldW = 0;
+  w->oldH = 0;
 
   cxinerama_win_upd_scr(ps, w);
 
@@ -3195,22 +3195,32 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
 
   float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
-    if (ps->o.spawn_center_screen) {
-      w->oldX = ps->root_width/2;
-      w->oldY = ps->root_height/2;
-      w->oldW = 1;
-      w->oldH = 1;
-    } else if (ps->o.spawn_center) {
-      w->oldX = ce->x + ce->width/2;
-      w->oldY = ce->y + ce->height/2;
-      w->oldW = 1;
-      w->oldH = 1;
+    if (!w->isOld) {
+      w->isOld = true;
+
+      if (ps->o.spawn_center_screen) {
+        w->oldX = ps->root_width/2;
+        w->oldY = ps->root_height/2;
+        w->oldW = 1;
+        w->oldH = 1;
+      } else if (ps->o.spawn_center) {
+        w->oldX = ce->x + ce->width/2;
+        w->oldY = ce->y + ce->height/2;
+        w->oldW = 1;
+        w->oldH = 1;
+      } else {
+        w->oldX = ce->x;
+        w->oldY = ce->y;
+        w->oldW = ce->width;
+        w->oldH = ce->height;
+      }
     } else {
-      w->oldX = ce->x;
-      w->oldY = ce->y;
-      w->oldW = ce->width;
-      w->oldH = ce->height;
+        w->oldX = ce->x;
+        w->oldY = ce->y;
+        w->oldW = ce->width;
+        w->oldH = ce->height;
     }
+
     w->newX = ce->x;
     w->newY = ce->y;
     w->newW = ce->width;
