@@ -3168,14 +3168,47 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
     w->a.y  = ce->y;
     w->oldX = ce->x;
     w->oldY = ce->y;
+    w->newX = ce->x;
+    w->newY = ce->y;
     w->moveTime = get_time_ms();
   } else if (w->newX == w->a.x && w->newY == w->a.y) {
     w->oldX = w->a.x;
     w->oldY = w->a.y;
     w->moveTime = get_time_ms();
   }
-  w->newX = ce->x;
-  w->newY = ce->y;
+  if (w->newX != ce->x || w->newY != ce->y) {
+    float t     = get_time_ms();
+    float moveD = ((float) t - w->moveTime) / ps->o.transition_length;
+
+    // If in the middle of a transition, calculate how long
+    // the animation would have had to run for for our current
+    // position to have been obtained from the new animation
+    // TODO: still causes jumpiness if moving in more than one direction!
+    if (w->moveTime != 0.0 && moveD < 1.0) {
+      float oldMoveD;
+      if (w->oldX == w->newX) {
+        oldMoveD = pow( (float) (w->newY - w->a.y) / (float) (w->newY - ce->y)
+                      , 1 / ps->o.transition_pow_y);
+      } else {
+        oldMoveD = pow( (float) (w->newX - w->a.x) / (float) (w->newX - ce->x)
+                      , 1 / ps->o.transition_pow_y);
+      }
+      float fakeT = (t - oldMoveD * (float) ps->o.transition_length);
+      /* printf("%f\n", fakeT); */
+      if (isnanf(fakeT)) {
+        w->moveTime = t;
+      } else {
+        w->moveTime = fakeT;
+      }
+    } else {
+      w->moveTime = t;
+    }
+
+    w->oldX = w->newX;
+    w->oldY = w->newY;
+    w->newX = ce->x;
+    w->newY = ce->y;
+  }
 
   if (w->a.map_state == IsUnmapped) {
     /* save the configure event for when the window maps */
