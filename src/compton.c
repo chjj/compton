@@ -5683,7 +5683,7 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --spawn-center
   lcfg_lookup_bool(&cfg, "spawn-center", &ps->o.spawn_center);
   // --no_scale_down
-  lcfg_lookup_bool(&cfg, "spawn-center", &ps->o.spawn_center);
+  lcfg_lookup_bool(&cfg, "no-scale-down", &ps->o.no_scale_down);
   // -r (shadow_radius)
   lcfg_lookup_int(&cfg, "shadow-radius", &ps->o.shadow_radius);
   // -o (shadow_opacity)
