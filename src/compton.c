@@ -3195,15 +3195,22 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
 
   float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
-    if (ps->o.spawn_center) {
+    if (ps->o.spawn_center_screen) {
       w->oldX = ps->root_width/2;
       w->oldY = ps->root_height/2;
+      w->oldW = 1;
+      w->oldH = 1;
+    } else if (ps->o.spawn_center) {
+      w->oldX = ce->x + ce->width/2;
+      w->oldY = ce->y + ce->height/2;
+      w->oldW = 1;
+      w->oldH = 1;
     } else {
       w->oldX = ce->x;
       w->oldY = ce->y;
+      w->oldW = ce->width;
+      w->oldH = ce->height;
     }
-    w->oldW = w->a.width;
-    w->oldH = w->a.height;
     w->newX = ce->x;
     w->newY = ce->y;
     w->newW = ce->width;
@@ -5668,6 +5675,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
     ps->o.transition_pow_h = dval;
   // --size-transition
   lcfg_lookup_bool(&cfg, "size-transition", &ps->o.size_transition);
+  // --spawn-center-screen
+  lcfg_lookup_bool(&cfg, "spawn-center-screen", &ps->o.spawn_center_screen);
   // --spawn-center
   lcfg_lookup_bool(&cfg, "spawn-center", &ps->o.spawn_center);
   // -r (shadow_radius)
@@ -7150,6 +7159,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .transition_pow_w = 1.5,
       .transition_pow_h = 1.5,
       .size_transition = true,
+      .spawn_center_screen = false,
       .spawn_center = true,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
       .glx_prog_win = GLX_PROG_MAIN_INIT,

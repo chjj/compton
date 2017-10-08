@@ -580,7 +580,9 @@ typedef struct _options_t {
   float transition_pow_h;
   /// Wether to animate on window size change
   bool size_transition;
-  /// Wether to animate on window size change
+  /// Wether to scale new windows in from the center of the screen
+  bool spawn_center_screen;
+  /// Wether to scale new windows in from their center
   bool spawn_center;
   /// GLX swap method we assume OpenGL uses.
   int glx_swap_method;
