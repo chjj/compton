@@ -927,10 +927,8 @@ win_extents(session_t *ps, win *w) {
 
   r.x = w->a.x;
   r.y = w->a.y;
-  /* r.width = w->widthb; */
-  /* r.height = w->heightb; */
-  r.width = w->a.width;
-  r.height = w->a.height; //TODO
+  r.width = w->widthb;
+  r.height = w->heightb;
 
   if (w->shadow) {
     XRectangle sr;
@@ -1137,22 +1135,23 @@ paint_preprocess(session_t *ps, win *list) {
         w->a.height = (int) h;
       }
 
-      free_region(ps, &w->extents);
-      free_region(ps, &w->border_size);
-
-      if (true) {
+      if (w->shadow) {
+        free_region(ps, &w->extents);
+        free_region(ps, &w->border_size);
+        w->extents = win_extents(ps, w);
         calc_win_size(ps, w);
 
-        // Rounded corner detection is affected by window size
         if (ps->shape_exists && ps->o.shadow_ignore_shaped
-            && ps->o.detect_rounded_corners && w->bounding_shaped)
-          win_update_shape(ps, w);
+             && ps->o.detect_rounded_corners && w->bounding_shaped)
+           win_update_shape(ps, w);
       }
-
       add_damage_win(ps, w);
+
+      /* w->to_paint = true; */
       w->mode = WMODE_ARGB;
       ps->idling = false;
     }
+
 
     // In case calling the fade callback function destroys this window
     next = w->next;
@@ -1986,7 +1985,7 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
     reg_paint = region;
     {
       reg_data_t cache_reg = REG_DATA_INIT;
-      if (!is_region_empty(ps, reg_paint, &cache_reg)) {
+      if (!is_region_empty(ps, reg_paint, &cache_reg) || true) {
         set_tgt_clip(ps, reg_paint, &cache_reg);
         // Blur window background
         if (w->blur_background && (!win_is_solid(ps, w)
@@ -2219,13 +2218,10 @@ map_win(session_t *ps, Window id) {
   assert(!win_is_focused_real(ps, w));
 
   w->a.map_state = IsViewable;
-
-  if (!w->isOld) {
-    w->oldX = -10000;
-    w->oldY = -10000;
-    w->oldW = 0;
-    w->oldH = 0;
-  }
+  /* w->oldX = -10000; */
+  /* w->oldY = -10000; */
+  /* w->oldW = 0; */
+  /* w->oldH = 0; */
 
   cxinerama_win_upd_scr(ps, w);
 
@@ -2317,7 +2313,6 @@ finish_map_win(session_t *ps, win *w) {
 static void
 finish_unmap_win(session_t *ps, win *w) {
   w->damaged = false;
-  w->isOld = true;
 
   w->in_openclose = false;
   /* w->oldX = -10000; */
@@ -3195,32 +3190,22 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
 
   float t = get_time_ms();
   if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
-    if (!w->isOld) {
-      /* w->isOld = true; */
-
-      if (ps->o.spawn_center_screen) {
-        w->oldX = ps->root_width/2;
-        w->oldY = ps->root_height/2;
-        w->oldW = 1;
-        w->oldH = 1;
-      } else if (ps->o.spawn_center) {
-        w->oldX = ce->x + ce->width/2;
-        w->oldY = ce->y + ce->height/2;
-        w->oldW = 1;
-        w->oldH = 1;
-      } else {
-        w->oldX = ce->x;
-        w->oldY = ce->y;
-        w->oldW = ce->width;
-        w->oldH = ce->height;
-      }
+    if (ps->o.spawn_center_screen) {
+      w->oldX = ps->root_width/2;
+      w->oldY = ps->root_height/2;
+      w->oldW = 1;
+      w->oldH = 1;
+    } else if (ps->o.spawn_center) {
+      w->oldX = ce->x + ce->width/2;
+      w->oldY = ce->y + ce->height/2;
+      w->oldW = 1;
+      w->oldH = 1;
     } else {
-        w->oldX = ce->x;
-        w->oldY = ce->y;
-        w->oldW = ce->width;
-        w->oldH = ce->height;
+      w->oldX = ce->x;
+      w->oldY = ce->y;
+      w->oldW = ce->width;
+      w->oldH = ce->height;
     }
-
     w->newX = ce->x;
     w->newY = ce->y;
     w->newW = ce->width;
@@ -3288,9 +3273,6 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
       w->newY = ce->y;
       w->newW = ce->width;
       w->newH = ce->height;
-
-      if (ps->o.no_scale_down && w->newW < w->oldW) { w->oldW = w->newW; }
-      if (ps->o.no_scale_down && w->newH < w->oldH) { w->oldH = w->newH; }
     }
   }
 
@@ -5692,8 +5674,6 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   lcfg_lookup_bool(&cfg, "spawn-center-screen", &ps->o.spawn_center_screen);
   // --spawn-center
   lcfg_lookup_bool(&cfg, "spawn-center", &ps->o.spawn_center);
-  // --no_scale_down
-  lcfg_lookup_bool(&cfg, "no-scale-down", &ps->o.no_scale_down);
   // -r (shadow_radius)
   lcfg_lookup_int(&cfg, "shadow-radius", &ps->o.shadow_radius);
   // -o (shadow_opacity)
@@ -7174,7 +7154,6 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .transition_pow_w = 1.5,
       .transition_pow_h = 1.5,
       .size_transition = true,
-      .no_scale_down   = false,
       .spawn_center_screen = false,
       .spawn_center = true,
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
