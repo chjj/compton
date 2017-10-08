@@ -1103,22 +1103,37 @@ paint_preprocess(session_t *ps, win *list) {
     bool to_paint = true;
     const winmode_t mode_old = w->mode;
 
-    bool posChanged = (w->oldX != -10000 && w->oldY != -10000) &&  (w->a.x != w->newX || w->a.y != w->newY);
+    bool posChanged = (w->oldX != -10000 && w->oldY != -10000 && w->oldW != 0 && w->oldH != 0)
+                   && (w->a.x != w->newX || w->a.y != w->newY || w->a.width != w->newW || w->a.height != w->newH);
+
     if (posChanged) {
       float t      = get_time_ms();
       float moveDx = (t - w->moveTimeX) / ps->o.transition_length;
       float moveDy = (t - w->moveTimeY) / ps->o.transition_length;
+      float moveDw = (t - w->moveTimeW) / ps->o.transition_length;
+      float moveDh = (t - w->moveTimeH) / ps->o.transition_length;
       if (moveDx >= 1.0) moveDx = 1.0;
       if (moveDy >= 1.0) moveDy = 1.0;
+      if (moveDw >= 1.0) moveDw = 1.0;
+      if (moveDh >= 1.0) moveDh = 1.0;
 
       float q = pow (moveDx, ps->o.transition_pow_x);
       float k = pow (moveDy, ps->o.transition_pow_y);
+      float g = pow (moveDw, ps->o.transition_pow_x);
+      float z = pow (moveDh, ps->o.transition_pow_y);
+
       float x = (float) w->oldX * (1-q) + (float) w->newX * q;
       float y = (float) w->oldY * (1-k) + (float) w->newY * k;
+      float W = (float) w->oldW * (1-g) + (float) w->newW * g;
+      float h = (float) w->oldH * (1-z) + (float) w->newH * z;
 
       add_damage_win(ps, w);
       w->a.x = (int) x;
       w->a.y = (int) y;
+      w->a.width  = (int) W;
+      w->a.height = (int) h;
+
+      /* printf("%d, %d - %d, %d\n", w->oldW, w->oldH, w->a.width, w->a.height); */
 
       if (w->shadow) {
         free_region(ps, &w->extents);
@@ -1636,8 +1651,12 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
 
   const int x = w->a.x;
   const int y = w->a.y;
-  const int wid = w->widthb;
-  const int hei = w->heightb;
+  /* const int wid = w->widthb; */
+  /* const int hei = w->heightb; */
+
+  // TODO: This will break if the user have window borders
+  const int wid = w->a.width;
+  const int hei = w->a.height;
 
   Picture pict = w->paint.pict;
 
@@ -2206,6 +2225,8 @@ map_win(session_t *ps, Window id) {
   w->a.map_state = IsViewable;
   w->oldX = -10000;
   w->oldY = -10000;
+  w->oldW = 0;
+  w->oldH = 0;
 
   cxinerama_win_upd_scr(ps, w);
 
@@ -2965,6 +2986,8 @@ add_win(session_t *ps, Window id, Window prev) {
 
     .oldX = -10000,
     .oldY = -10000,
+    .oldW = 0,
+    .oldH = 0,
   };
 
   // Reject overlay window and already added windows
@@ -3167,24 +3190,36 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
     return;
 
   float t = get_time_ms();
-  if (w->oldX == -10000 && w->oldY == -10000) {
+  if (w->oldX == -10000 && w->oldY == -10000 && w->oldW == 0 && w->oldH == 0) {
     w->oldX = w->a.x;
     w->oldY = w->a.y;
+    w->oldW = w->a.width;
+    w->oldH = w->a.height;
     w->newX = ce->x;
     w->newY = ce->y;
+    w->newW = ce->width;
+    w->newH = ce->height;
     w->moveTimeX = t;
     w->moveTimeY = t;
+    w->moveTimeW = t;
+    w->moveTimeH = t;
   } else {
     if (w->newX == w->a.x && w->newY == w->a.y) {
       w->oldX = w->a.x;
       w->oldY = w->a.y;
+      w->oldW = w->a.width;
+      w->oldH = w->a.height;
       w->moveTimeX = t;
       w->moveTimeY = t;
+      w->moveTimeW = t;
+      w->moveTimeH = t;
     }
-    if (w->newX != ce->x || w->newY != ce->y) {
-      float t     = get_time_ms();
+    if (w->newX != ce->x || w->newY != ce->y || w->newW != ce->width || w->newH != ce->height) {
+      float t      = get_time_ms();
       float moveDx = ((float) t - w->moveTimeX) / ps->o.transition_length;
       float moveDy = ((float) t - w->moveTimeY) / ps->o.transition_length;
+      float moveDw = ((float) t - w->moveTimeW) / ps->o.transition_length;
+      float moveDh = ((float) t - w->moveTimeH) / ps->o.transition_length;
 
       if (w->moveTimeX != 0.0 && moveDx < 1.0 && w->oldX != w->newX) {
         float oldMoveDx = pow((float) (w->newX - w->a.x) / (float) (w->newX - ce->x), 1 / ps->o.transition_pow_x);
@@ -3202,11 +3237,31 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
       } else {
         w->moveTimeY    = t;
       }
+      if (w->moveTimeW != 0.0 && moveDw < 1.0 && w->oldW != w->newW) {
+        float oldMoveDw = pow((float) (w->newW - w->a.width) / (float) (w->newW - ce->width), 1 / ps->o.transition_pow_x);
+        float fakeT     = (t - oldMoveDw * (float) ps->o.transition_length);
+        /* printf("Y: %f,%f\n", fakeT, t); */
+        w->moveTimeW    = isnanf(fakeT)? t : fakeT;
+      } else {
+        w->moveTimeW    = t;
+      }
+      if (w->moveTimeH != 0.0 && moveDh < 1.0 && w->oldH != w->newH) {
+        float oldMoveDh = pow((float) (w->newH - w->a.height) / (float) (w->newH - ce->height), 1 / ps->o.transition_pow_y);
+        float fakeT     = (t - oldMoveDh * (float) ps->o.transition_length);
+        /* printf("Y: %f,%f\n", fakeT, t); */
+        w->moveTimeH    = isnanf(fakeT)? t : fakeT;
+      } else {
+        w->moveTimeH    = t;
+      }
 
       w->oldX = w->newX;
       w->oldY = w->newY;
+      w->oldW = w->newW;
+      w->oldH = w->newH;
       w->newX = ce->x;
       w->newY = ce->y;
+      w->newW = ce->width;
+      w->newH = ce->height;
     }
   }
 
