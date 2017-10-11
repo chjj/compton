@@ -1137,23 +1137,21 @@ paint_preprocess(session_t *ps, win *list) {
         w->a.height = (int) h;
       }
 
-      if (w->shadow) {
-        free_region(ps, &w->extents);
-        free_region(ps, &w->border_size);
-        w->extents = win_extents(ps, w);
-        calc_win_size(ps, w);
-
-        if (ps->shape_exists && ps->o.shadow_ignore_shaped
-             && ps->o.detect_rounded_corners && w->bounding_shaped)
-           win_update_shape(ps, w);
-      }
-      add_damage_win(ps, w);
-
       /* w->to_paint = true; */
       w->mode = WMODE_ARGB;
       ps->idling = false;
     }
+    if ((w->shadow && posChanged) || (ps->o.size_transition && w->damaged)) {
+      free_region(ps, &w->extents);
+      free_region(ps, &w->border_size);
+      w->extents = win_extents(ps, w);
+      calc_win_size(ps, w);
 
+      if (ps->shape_exists && ps->o.shadow_ignore_shaped
+            && ps->o.detect_rounded_corners && w->bounding_shaped)
+          win_update_shape(ps, w);
+    }
+    /* add_damage_win(ps, w); */
 
     // In case calling the fade callback function destroys this window
     next = w->next;
