@@ -2407,7 +2407,8 @@ calc_dim(session_t *ps, win *w) {
   if (w->destroyed || IsViewable != w->a.map_state)
     return;
 
-  if (ps->o.inactive_dim && !(w->focused)) {
+  if (ps->o.inactive_dim && !(w->focused) &&
+      !win_match(ps, w, ps->o.inactive_dim_blacklist, &w->cache_idblst)) {
     dim = true;
   } else {
     dim = false;
@@ -2893,6 +2894,7 @@ add_win(session_t *ps, Window id, Window prev) {
     .cache_ivclst = NULL,
     .cache_bbblst = NULL,
     .cache_oparule = NULL,
+    .cache_idblst = NULL,
 
     .opacity = 0,
     .opacity_tgt = 0,
@@ -4566,6 +4568,18 @@ usage(int ret) {
     "--inactive-dim value\n"
     "  Dim inactive windows. (0.0 - 1.0, defaults to 0)\n"
     "\n"
+    "--inactive-dim-red value\n"
+    "  Red component of inactive dim color. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
+    "--inactive-dim-green value\n"
+    "  Green component of inactive dim color. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
+    "--inactive-dim-blue value\n"
+    "  Blue component of inactive dim color. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
+    "--inactive-dim-exclude condition\n"
+    "  Exclude conditions for inactive dim. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
     "--active-opacity opacity\n"
     "  Default opacity for active windows. (0.0 - 1.0)\n"
     "\n"
@@ -5609,6 +5623,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --detect-client-leader
   lcfg_lookup_bool(&cfg, "detect-client-leader",
       &ps->o.detect_client_leader);
+  // --inactive-dim-exclude
+  parse_cfg_condlst(ps, &cfg, &ps->o.inactive_dim_blacklist, "inactive-dim-exclude");
   // --shadow-exclude
   parse_cfg_condlst(ps, &cfg, &ps->o.shadow_blacklist, "shadow-exclude");
   // --fade-exclude
@@ -5713,6 +5729,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "inactive-dim-red", required_argument, NULL, 322 },
     { "inactive-dim-green", required_argument, NULL, 323 },
     { "inactive-dim-blue", required_argument, NULL, 324 },
+    { "inactive-dim-exclude", required_argument, NULL, 325 },
     { "mark-wmwin-focused", no_argument, NULL, 262 },
     { "shadow-exclude", required_argument, NULL, 263 },
     { "mark-ovredir-focused", no_argument, NULL, 264 },
@@ -6056,6 +6073,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       case 324:
         // --shadow-blue
         ps->o.inactive_dim_blue = atof(optarg);
+        break;
+      case 325:
+        condlst_add(ps, &ps->o.inactive_dim_blacklist, optarg);
         break;
       default:
         usage(1);
@@ -7064,6 +7084,10 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .blur_background_blacklist = NULL,
       .blur_kerns = { NULL },
       .inactive_dim = 0.0,
+      .inactive_dim_red = 0.0,
+      .inactive_dim_green = 0.0,
+      .inactive_dim_blue = 0.0,
+      .inactive_dim_blacklist = NULL,
       .inactive_dim_fixed = false,
       .invert_color_list = NULL,
       .opacity_rules = NULL,
@@ -7549,6 +7573,7 @@ session_destroy(session_t *ps) {
   free_wincondlst(&ps->o.fade_blacklist);
   free_wincondlst(&ps->o.focus_blacklist);
   free_wincondlst(&ps->o.invert_color_list);
+  free_wincondlst(&ps->o.inactive_dim_blacklist);
   free_wincondlst(&ps->o.blur_background_blacklist);
   free_wincondlst(&ps->o.opacity_rules);
   free_wincondlst(&ps->o.paint_blacklist);
