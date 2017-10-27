@@ -710,7 +710,10 @@ typedef struct _options_t {
   /// Blur convolution kernel.
   XFixed *blur_kerns[MAX_BLUR_PASS];
   /// How much to dim an inactive window. 0.0 - 1.0, 0 to disable.
+  double inactive_dim_red, inactive_dim_green, inactive_dim_blue;
   double inactive_dim;
+  /// Inactive dim blacklist. A linked list of conditions.
+  c2_lptr_t *inactive_dim_blacklist;
   /// Whether to use fixed inactive dim opacity, instead of deciding
   /// based on window opacity.
   bool inactive_dim_fixed;
@@ -1150,6 +1153,7 @@ typedef struct _win {
   char *role;
   const c2_lptr_t *cache_sblst;
   const c2_lptr_t *cache_fblst;
+  const c2_lptr_t *cache_idblst;
   const c2_lptr_t *cache_fcblst;
   const c2_lptr_t *cache_ivclst;
   const c2_lptr_t *cache_bbblst;
@@ -2204,7 +2208,8 @@ glx_blur_dst(session_t *ps, int dx, int dy, int width, int height, float z,
 
 bool
 glx_dim_dst(session_t *ps, int dx, int dy, int width, int height, float z,
-    GLfloat factor, XserverRegion reg_tgt, const reg_data_t *pcache_reg);
+  GLfloat r, GLfloat g, GLfloat b, GLfloat factor,
+  XserverRegion reg_tgt, const reg_data_t *pcache_reg);
 
 bool
 glx_render_(session_t *ps, const glx_texture_t *ptex,

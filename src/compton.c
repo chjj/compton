@@ -1691,6 +1691,9 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   // Dimming the window if needed
   if (w->dim) {
     double dim_opacity = ps->o.inactive_dim;
+    double dim_red = ps->o.inactive_dim_red;
+    double dim_green = ps->o.inactive_dim_green;
+    double dim_blue = ps->o.inactive_dim_blue;
     if (!ps->o.inactive_dim_fixed)
       dim_opacity *= get_opacity_percent(w);
 
@@ -1699,10 +1702,13 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
       case BKEND_XR_GLX_HYBRID:
         {
           unsigned short cval = 0xffff * dim_opacity;
+          unsigned short rval = 0xffff * dim_red;
+          unsigned short gval = 0xffff * dim_green;
+          unsigned short bval = 0xffff * dim_blue;
 
           // Premultiply color
           XRenderColor color = {
-            .red = 0, .green = 0, .blue = 0, .alpha = cval,
+            .red = rval, .green = gval, .blue = bval, .alpha = cval,
           };
 
           XRectangle rect = {
@@ -1718,8 +1724,9 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
         break;
 #ifdef CONFIG_VSYNC_OPENGL
       case BKEND_GLX:
-        glx_dim_dst(ps, x, y, wid, hei, ps->psglx->z - 0.7, dim_opacity,
-            reg_paint, pcache_reg);
+        glx_dim_dst(ps, x, y, wid, hei, ps->psglx->z - 0.7,
+          dim_red, dim_green, dim_blue, dim_opacity,
+          reg_paint, pcache_reg);
         break;
 #endif
     }
@@ -2400,7 +2407,8 @@ calc_dim(session_t *ps, win *w) {
   if (w->destroyed || IsViewable != w->a.map_state)
     return;
 
-  if (ps->o.inactive_dim && !(w->focused)) {
+  if (ps->o.inactive_dim && !(w->focused) &&
+      !win_match(ps, w, ps->o.inactive_dim_blacklist, &w->cache_idblst)) {
     dim = true;
   } else {
     dim = false;
@@ -2886,6 +2894,7 @@ add_win(session_t *ps, Window id, Window prev) {
     .cache_ivclst = NULL,
     .cache_bbblst = NULL,
     .cache_oparule = NULL,
+    .cache_idblst = NULL,
 
     .opacity = 0,
     .opacity_tgt = 0,
@@ -4559,6 +4568,18 @@ usage(int ret) {
     "--inactive-dim value\n"
     "  Dim inactive windows. (0.0 - 1.0, defaults to 0)\n"
     "\n"
+    "--inactive-dim-red value\n"
+    "  Red component of inactive dim color. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
+    "--inactive-dim-green value\n"
+    "  Green component of inactive dim color. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
+    "--inactive-dim-blue value\n"
+    "  Blue component of inactive dim color. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
+    "--inactive-dim-exclude condition\n"
+    "  Exclude conditions for inactive dim. (0.0 - 1.0, defaults to 0)\n"
+    "\n"
     "--active-opacity opacity\n"
     "  Default opacity for active windows. (0.0 - 1.0)\n"
     "\n"
@@ -5040,7 +5061,7 @@ parse_matrix(session_t *ps, const char *src, const char **endptr) {
   int wid = 0, hei = 0;
   const char *pc = NULL;
   XFixed *matrix = NULL;
-  
+
   // Get matrix width and height
   {
     double val = 0.0;
@@ -5545,6 +5566,12 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --inactive-opacity-override
   lcfg_lookup_bool(&cfg, "inactive-opacity-override",
       &ps->o.inactive_opacity_override);
+  // --inactive-dim-red
+  config_lookup_float(&cfg, "inactive-dim-red", &ps->o.inactive_dim_red);
+  // --inactive-dim-green
+  config_lookup_float(&cfg, "inactive-dim-green", &ps->o.inactive_dim_green);
+  // --inactive-dim-blue
+  config_lookup_float(&cfg, "inactive-dim-blue", &ps->o.inactive_dim_blue);
   // --inactive-dim
   config_lookup_float(&cfg, "inactive-dim", &ps->o.inactive_dim);
   // --mark-wmwin-focused
@@ -5596,6 +5623,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --detect-client-leader
   lcfg_lookup_bool(&cfg, "detect-client-leader",
       &ps->o.detect_client_leader);
+  // --inactive-dim-exclude
+  parse_cfg_condlst(ps, &cfg, &ps->o.inactive_dim_blacklist, "inactive-dim-exclude");
   // --shadow-exclude
   parse_cfg_condlst(ps, &cfg, &ps->o.shadow_blacklist, "shadow-exclude");
   // --fade-exclude
@@ -5697,6 +5726,10 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "shadow-blue", required_argument, NULL, 259 },
     { "inactive-opacity-override", no_argument, NULL, 260 },
     { "inactive-dim", required_argument, NULL, 261 },
+    { "inactive-dim-red", required_argument, NULL, 322 },
+    { "inactive-dim-green", required_argument, NULL, 323 },
+    { "inactive-dim-blue", required_argument, NULL, 324 },
+    { "inactive-dim-exclude", required_argument, NULL, 325 },
     { "mark-wmwin-focused", no_argument, NULL, 262 },
     { "shadow-exclude", required_argument, NULL, 263 },
     { "mark-ovredir-focused", no_argument, NULL, 264 },
@@ -6029,6 +6062,21 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(319, no_x_selection);
       P_CASEBOOL(731, reredir_on_root_change);
       P_CASEBOOL(732, glx_reinit_on_root_change);
+      case 322:
+        // --shadow-red
+        ps->o.inactive_dim_red = atof(optarg);
+        break;
+      case 323:
+        // --shadow-green
+        ps->o.inactive_dim_green = atof(optarg);
+        break;
+      case 324:
+        // --shadow-blue
+        ps->o.inactive_dim_blue = atof(optarg);
+        break;
+      case 325:
+        condlst_add(ps, &ps->o.inactive_dim_blacklist, optarg);
+        break;
       default:
         usage(1);
         break;
@@ -6047,6 +6095,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
   ps->o.shadow_green = normalize_d(ps->o.shadow_green);
   ps->o.shadow_blue = normalize_d(ps->o.shadow_blue);
   ps->o.inactive_dim = normalize_d(ps->o.inactive_dim);
+  ps->o.inactive_dim_red = normalize_d(ps->o.inactive_dim_red);
+  ps->o.inactive_dim_green = normalize_d(ps->o.inactive_dim_green);
+  ps->o.inactive_dim_blue = normalize_d(ps->o.inactive_dim_blue);
   ps->o.frame_opacity = normalize_d(ps->o.frame_opacity);
   ps->o.shadow_opacity = normalize_d(ps->o.shadow_opacity);
   cfgtmp.menu_opacity = normalize_d(cfgtmp.menu_opacity);
@@ -7033,6 +7084,10 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .blur_background_blacklist = NULL,
       .blur_kerns = { NULL },
       .inactive_dim = 0.0,
+      .inactive_dim_red = 0.0,
+      .inactive_dim_green = 0.0,
+      .inactive_dim_blue = 0.0,
+      .inactive_dim_blacklist = NULL,
       .inactive_dim_fixed = false,
       .invert_color_list = NULL,
       .opacity_rules = NULL,
@@ -7518,6 +7573,7 @@ session_destroy(session_t *ps) {
   free_wincondlst(&ps->o.fade_blacklist);
   free_wincondlst(&ps->o.focus_blacklist);
   free_wincondlst(&ps->o.invert_color_list);
+  free_wincondlst(&ps->o.inactive_dim_blacklist);
   free_wincondlst(&ps->o.blur_background_blacklist);
   free_wincondlst(&ps->o.opacity_rules);
   free_wincondlst(&ps->o.paint_blacklist);

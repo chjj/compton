@@ -1386,12 +1386,13 @@ glx_blur_dst_end:
 
 bool
 glx_dim_dst(session_t *ps, int dx, int dy, int width, int height, float z,
-    GLfloat factor, XserverRegion reg_tgt, const reg_data_t *pcache_reg) {
+    GLfloat r, GLfloat g, GLfloat b, GLfloat factor,
+    XserverRegion reg_tgt, const reg_data_t *pcache_reg) {
   // It's possible to dim in glx_render(), but it would be over-complicated
   // considering all those mess in color negation and modulation
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-  glColor4f(0.0f, 0.0f, 0.0f, factor);
+  glColor4f(r, g, b, factor);
 
   {
     P_PAINTREG_START();
@@ -1903,4 +1904,3 @@ glx_create_program_from_str(const char *vert_shader_str,
   return prog;
 }
 #endif
-
