@@ -752,6 +752,10 @@ glx_bind_pixmap(session_t *ps, glx_texture_t **pptex, Pixmap pixmap,
     };
 
     ptex = malloc(sizeof(glx_texture_t));
+    if(!ptex){
+      printf_errf("Can't allocate memory. This can't work.");
+      return false;
+    }
     allocchk(ptex);
     memcpy(ptex, &GLX_TEX_DEF, sizeof(glx_texture_t));
     *pptex = ptex;

@@ -7136,6 +7136,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
 
   // Allocate a session and copy default values into it
   session_t *ps = malloc(sizeof(session_t));
+  if(!ps){
+    printf_errfq(1, "(): Can't allocate session.");
+  }
   memcpy(ps, &s_def, sizeof(session_t));
   ps_g = ps;
   ps->ignore_tail = &ps->ignore_head;
