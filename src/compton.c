@@ -1598,37 +1598,42 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   const int y = w->a.y;
   const int wid = w->widthb;
   const int hei = w->heightb;
+  const bool invert_color = bkend_use_xrender(ps) && w->invert_color;
 
   Picture pict = w->paint.pict;
+  Picture invpict = NULL;
 
   // Invert window color, if required
-  if (bkend_use_xrender(ps) && w->invert_color) {
-    Picture newpict = xr_build_picture(ps, wid, hei, w->pictfmt);
-    if (newpict) {
+  if (invert_color) {
+    invpict = xr_build_picture(ps, wid, hei, w->pictfmt);
+    if (invpict) {
       // Apply clipping region to save some CPU
       if (reg_paint) {
         XserverRegion reg = copy_region(ps, reg_paint);
         XFixesTranslateRegion(ps->dpy, reg, -x, -y);
-        XFixesSetPictureClipRegion(ps->dpy, newpict, 0, 0, reg);
+        XFixesSetPictureClipRegion(ps->dpy, invpict, 0, 0, reg);
         free_region(ps, &reg);
       }
 
       XRenderComposite(ps->dpy, PictOpSrc, pict, None,
-          newpict, 0, 0, 0, 0, 0, 0, wid, hei);
+          invpict, 0, 0, 0, 0, 0, 0, wid, hei);
       XRenderComposite(ps->dpy, PictOpDifference, ps->white_picture, None,
-          newpict, 0, 0, 0, 0, 0, 0, wid, hei);
+          invpict, 0, 0, 0, 0, 0, 0, wid, hei);
+      // Restore hue after inverting colors
+      XRenderComposite(ps->dpy, PictOpHSLHue, pict, None,
+          invpict, 0, 0, 0, 0, 0, 0, wid, hei);
       // We use an extra PictOpInReverse operation to get correct pixel
       // alpha. There could be a better solution.
       if (WMODE_ARGB == w->mode)
         XRenderComposite(ps->dpy, PictOpInReverse, pict, None,
-            newpict, 0, 0, 0, 0, 0, 0, wid, hei);
-      pict = newpict;
+            invpict, 0, 0, 0, 0, 0, 0, wid, hei);
     }
   }
 
   const double dopacity = get_opacity_percent(w);
 
-  if (!w->frame_opacity) {
+  if (!w->frame_opacity && !invert_color) {
+    // If neither frame opacity nor inverted color is required
     win_render(ps, w, 0, 0, wid, hei, dopacity, reg_paint, pcache_reg, pict);
   }
   else {
@@ -1638,9 +1643,10 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
     const int l = extents.left;
     const int b = extents.bottom;
     const int r = extents.right;
+    const double frame_opacity = w->frame_opacity ? w->frame_opacity : 1.0;
 
 #define COMP_BDR(cx, cy, cwid, chei) \
-    win_render(ps, w, (cx), (cy), (cwid), (chei), w->frame_opacity, \
+    win_render(ps, w, (cx), (cy), (cwid), (chei), frame_opacity, \
         reg_paint, pcache_reg, pict)
 
     // The following complicated logic is required because some broken
@@ -1676,7 +1682,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
           pwid = wid - l - pwid;
           if (pwid > 0) {
             // body
-            win_render(ps, w, l, t, pwid, phei, dopacity, reg_paint, pcache_reg, pict);
+            win_render(ps, w, l, t, pwid, phei, dopacity, reg_paint, pcache_reg,
+              invpict ? invpict : pict);
           }
         }
       }
@@ -1685,8 +1692,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
 
 #undef COMP_BDR
 
-  if (pict != w->paint.pict)
-    free_picture(ps, &pict);
+  if (invpict)
+    free_picture(ps, &invpict);
 
   // Dimming the window if needed
   if (w->dim) {
@@ -2759,7 +2766,7 @@ win_mark_client(session_t *ps, win *w, Window client) {
   win_upd_wintype(ps, w);
 
   // Get frame widths. The window is in damaged area already.
-  if (ps->o.frame_opacity)
+  if (ps->o.frame_opacity || ps->o.invert_color_list)
     get_frame_extents(ps, w, client);
 
   // Get window group
