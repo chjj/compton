@@ -18,6 +18,10 @@ OBJS = compton.o
 # === Configuration flags ===
 CFG = -std=c99
 
+ifneq "$(GLX_DEBUG)" ""
+  CFG += -DDEBUG_GLX
+endif
+
 # ==== Xinerama ====
 # Enables support for --xinerama-shadow-crop
 ifeq "$(NO_XINERAMA)" ""
