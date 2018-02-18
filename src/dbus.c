@@ -966,13 +966,11 @@ cdbus_process_opts_get(session_t *ps, DBusMessage *msg) {
   cdbus_m_opts_get_do(detect_transient, cdbus_reply_bool);
   cdbus_m_opts_get_do(detect_client_leader, cdbus_reply_bool);
 
-#ifdef CONFIG_VSYNC_OPENGL
   cdbus_m_opts_get_do(glx_no_stencil, cdbus_reply_bool);
   cdbus_m_opts_get_do(glx_copy_from_front, cdbus_reply_bool);
   cdbus_m_opts_get_do(glx_use_copysubbuffermesa, cdbus_reply_bool);
   cdbus_m_opts_get_do(glx_no_rebind_pixmap, cdbus_reply_bool);
   cdbus_m_opts_get_do(glx_swap_method, cdbus_reply_int32);
-#endif
 
   cdbus_m_opts_get_do(track_focus, cdbus_reply_bool);
   cdbus_m_opts_get_do(track_wdata, cdbus_reply_bool);
