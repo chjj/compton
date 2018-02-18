@@ -1346,15 +1346,9 @@ win_blur_background(session_t *ps, win *w, Picture tgt_buffer,
     factor_center = pct * 8.0 / (1.1 - pct);
   }
 
-  switch (ps->o.backend) {
-    case BKEND_GLX:
-      // TODO: Handle frame opacity
-      glx_blur_dst(ps, x, y, wid, hei, ps->psglx->z - 0.5, factor_center,
+  // TODO: Handle frame opacity
+  glx_blur_dst(ps, x, y, wid, hei, ps->psglx->z - 0.5, factor_center,
           reg_paint, pcache_reg, &w->glx_blur_cache);
-      break;
-    default:
-      assert(0);
-  }
 }
 
 static void
@@ -4657,177 +4651,6 @@ parse_long(const char *s, long *dest) {
 }
 
 /**
- * Parse a floating-point number in matrix.
- */
-static inline const char *
-parse_matrix_readnum(const char *src, double *dest) {
-  char *pc = NULL;
-  double val = strtod(src, &pc);
-  if (!pc || pc == src) {
-    printf_errf("(\"%s\"): No number found.", src);
-    return src;
-  }
-
-  while (*pc && (isspace(*pc) || ',' == *pc))
-    ++pc;
-
-  *dest = val;
-
-  return pc;
-}
-
-/**
- * Parse a matrix.
- */
-static inline XFixed *
-parse_matrix(session_t *ps, const char *src, const char **endptr) {
-  int wid = 0, hei = 0;
-  const char *pc = NULL;
-  XFixed *matrix = NULL;
-  
-  // Get matrix width and height
-  {
-    double val = 0.0;
-    if (src == (pc = parse_matrix_readnum(src, &val)))
-      goto parse_matrix_err;
-    src = pc;
-    wid = val;
-    if (src == (pc = parse_matrix_readnum(src, &val)))
-      goto parse_matrix_err;
-    src = pc;
-    hei = val;
-  }
-
-  // Validate matrix width and height
-  if (wid <= 0 || hei <= 0) {
-    printf_errf("(): Invalid matrix width/height.");
-    goto parse_matrix_err;
-  }
-  if (!(wid % 2 && hei % 2)) {
-    printf_errf("(): Width/height not odd.");
-    goto parse_matrix_err;
-  }
-  if (wid > 16 || hei > 16) {
-    printf_errf("(): Matrix width/height too large.");
-    goto parse_matrix_err;
-  }
-
-  // Allocate memory
-  matrix = calloc(wid * hei + 2, sizeof(XFixed));
-  if (!matrix) {
-    printf_errf("(): Failed to allocate memory for matrix.");
-    goto parse_matrix_err;
-  }
-
-  // Read elements
-  {
-    int skip = hei / 2 * wid + wid / 2;
-    bool hasneg = false;
-    for (int i = 0; i < wid * hei; ++i) {
-      // Ignore the center element
-      if (i == skip) {
-        matrix[2 + i] = XDoubleToFixed(0);
-        continue;
-      }
-      double val = 0;
-      if (src == (pc = parse_matrix_readnum(src, &val)))
-        goto parse_matrix_err;
-      src = pc;
-      if (val < 0) hasneg = true;
-      matrix[2 + i] = XDoubleToFixed(val);
-    }
-  }
-
-  // Detect trailing characters
-  for ( ;*pc && ';' != *pc; ++pc)
-    if (!isspace(*pc) && ',' != *pc) {
-      printf_errf("(): Trailing characters in matrix string.");
-      goto parse_matrix_err;
-    }
-
-  // Jump over spaces after ';'
-  if (';' == *pc) {
-    ++pc;
-    while (*pc && isspace(*pc))
-      ++pc;
-  }
-
-  // Require an end of string if endptr is not provided, otherwise
-  // copy end pointer to endptr
-  if (endptr)
-    *endptr = pc;
-  else if (*pc) {
-    printf_errf("(): Only one matrix expected.");
-    goto parse_matrix_err;
-  }
-
-  // Fill in width and height
-  matrix[0] = XDoubleToFixed(wid);
-  matrix[1] = XDoubleToFixed(hei);
-
-  return matrix;
-
-parse_matrix_err:
-  free(matrix);
-  return NULL;
-}
-
-/**
- * Parse a convolution kernel.
- */
-static inline XFixed *
-parse_conv_kern(session_t *ps, const char *src, const char **endptr) {
-  return parse_matrix(ps, src, endptr);
-}
-
-/**
- * Parse a list of convolution kernels.
- */
-static bool
-parse_conv_kern_lst(session_t *ps, const char *src, XFixed **dest, int max) {
-  static const struct {
-    const char *name;
-    const char *kern_str;
-  } CONV_KERN_PREDEF[] = {
-    { "3x3box", "3,3,1,1,1,1,1,1,1,1," },
-    { "5x5box", "5,5,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1," },
-    { "7x7box", "7,7,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1," },
-    { "3x3gaussian", "3,3,0.243117,0.493069,0.243117,0.493069,0.493069,0.243117,0.493069,0.243117," },
-    { "5x5gaussian", "5,5,0.003493,0.029143,0.059106,0.029143,0.003493,0.029143,0.243117,0.493069,0.243117,0.029143,0.059106,0.493069,0.493069,0.059106,0.029143,0.243117,0.493069,0.243117,0.029143,0.003493,0.029143,0.059106,0.029143,0.003493," },
-    { "7x7gaussian", "7,7,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.001723,0.059106,0.493069,0.493069,0.059106,0.001723,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003," },
-    { "9x9gaussian", "9,9,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000012,0.001723,0.059106,0.493069,0.493069,0.059106,0.001723,0.000012,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000," },
-    { "11x11gaussian", "11,11,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000,0.000000,0.000000,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000000,0.000000,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000000,0.000000,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000000,0.000000,0.000012,0.001723,0.059106,0.493069,0.493069,0.059106,0.001723,0.000012,0.000000,0.000000,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000000,0.000000,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000000,0.000000,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000000,0.000000,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000," },
-  };
-  for (int i = 0;
-      i < sizeof(CONV_KERN_PREDEF) / sizeof(CONV_KERN_PREDEF[0]); ++i)
-    if (!strcmp(CONV_KERN_PREDEF[i].name, src))
-      return parse_conv_kern_lst(ps, CONV_KERN_PREDEF[i].kern_str, dest, max);
-
-  int i = 0;
-  const char *pc = src;
-
-  // Free old kernels
-  for (i = 0; i < max; ++i) {
-    free(dest[i]);
-    dest[i] = NULL;
-  }
-
-  // Continue parsing until the end of source string
-  i = 0;
-  while (pc && *pc && i < max - 1) {
-    if (!(dest[i++] = parse_conv_kern(ps, pc, &pc)))
-      return false;
-  }
-
-  if (*pc) {
-    printf_errf("(): Too many blur kernels!");
-    return false;
-  }
-
-  return true;
-}
-
-/**
  * Parse a X geometry.
  */
 static inline bool
@@ -5259,10 +5082,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --blur-background-fixed
   lcfg_lookup_bool(&cfg, "blur-background-fixed",
       &ps->o.blur_background_fixed);
-  // --blur-kern
-  if (config_lookup_string(&cfg, "blur-kern", &sval)
-      && !parse_conv_kern_lst(ps, sval, ps->o.blur_kerns, MAX_BLUR_PASS))
-    exit(1);
+  // --blur-level
+  lcfg_lookup_int(&cfg, "blur-level", &ps->o.blur_level);
   // --resize-damage
   lcfg_lookup_int(&cfg, "resize-damage", &ps->o.resize_damage);
   // --glx-no-stencil
@@ -5377,7 +5198,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "glx-no-rebind-pixmap", no_argument, NULL, 298 },
     { "glx-swap-method", required_argument, NULL, 299 },
     { "fade-exclude", required_argument, NULL, 300 },
-    { "blur-kern", required_argument, NULL, 301 },
+    { "blur-level", required_argument, NULL, 301 },
     { "resize-damage", required_argument, NULL, 302 },
     { "glx-use-gpushader4", no_argument, NULL, 303 },
     { "opacity-rule", required_argument, NULL, 304 },
@@ -5628,11 +5449,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
         // --fade-exclude
         condlst_add(ps, &ps->o.fade_blacklist, optarg);
         break;
-      case 301:
-        // --blur-kern
-        if (!parse_conv_kern_lst(ps, optarg, ps->o.blur_kerns, MAX_BLUR_PASS))
-          exit(1);
-        break;
+      P_CASELONG(301, blur_level);
       P_CASELONG(302, resize_damage);
       P_CASEBOOL(303, glx_use_gpushader4);
       case 304:
@@ -6569,6 +6386,7 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .synchronize = false,
       .detect_rounded_corners = false,
       .paint_on_overlay = false,
+      .blur_level = 0,
       .resize_damage = 0,
       .unredir_if_possible = false,
       .unredir_if_possible_blacklist = NULL,
