@@ -447,12 +447,12 @@ typedef struct {
   GLuint frag_shader;
   /// GLSL program for blur.
   GLuint prog;
-  /// Location of uniform "offset_x" in blur GLSL program.
-  GLint unifm_offset_x;
-  /// Location of uniform "offset_y" in blur GLSL program.
-  GLint unifm_offset_y;
+  /// Location of uniform "pixeluv" in blur GLSL program.
+  GLint unifm_pixeluv;
   /// Location of uniform "factor_center" in blur GLSL program.
   GLint unifm_factor_center;
+
+  GLint unifm_tex;
 } glx_blur_pass_t;
 
 typedef struct {
