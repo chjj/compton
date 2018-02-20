@@ -445,10 +445,14 @@ struct _glx_texture {
 typedef struct {
   /// Fragment shader for blur.
   GLuint frag_shader;
+  GLuint upscale_shader;
   /// GLSL program for blur.
   GLuint prog;
+  GLuint upscale_prog;
   /// Location of uniform "pixeluv" in blur GLSL program.
   GLint unifm_pixeluv;
+  /// Location of uniform "extent" in the blur GLSL program.
+  GLint unifm_extent;
   /// Location of uniform "factor_center" in blur GLSL program.
   GLint unifm_factor_center;
 

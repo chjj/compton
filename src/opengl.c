@@ -108,6 +108,7 @@ glx_init(session_t *ps, bool need_render) {
       glx_blur_pass_t *ppass = &ps->psglx->blur_passes[i];
       ppass->unifm_factor_center = -1;
       ppass->unifm_pixeluv = -1;
+      ppass->unifm_extent = -1;
     }
   }
 
@@ -394,19 +395,46 @@ glx_init_blur(session_t *ps) {
     static const char *FRAG_SHADER_BLUR_PREFIX =
       "#version 110\n"
       "uniform vec2 pixeluv;\n"
+      "uniform vec2 extent;\n"
       "uniform float factor_center;\n"
       "uniform sampler2D tex_scr;\n"
+      "\n"
+      "vec4 sample(vec2 uv) {\n"
+      "return texture2D(tex_scr, clamp(uv, vec2(0.0), extent));\n"
+      "}\n"
       "\n"
       "void main() {\n"
       "vec2 uv = gl_TexCoord[0].xy;\n"
       "vec4 sum = texture2D(tex_scr, uv) * 4.0;\n"
-      "sum += texture2D(tex_scr, uv + pixeluv);\n"
-      "sum += texture2D(tex_scr, uv + -pixeluv);\n"
-      "sum += texture2D(tex_scr, uv + vec2(pixeluv.x, pixeluv.y));\n"
-      "sum += texture2D(tex_scr, uv + vec2(pixeluv.x, pixeluv.y));\n"
+      "sum += sample(uv + pixeluv);\n"
+      "sum += sample(uv + -pixeluv);\n"
+      "sum += sample(uv + vec2(pixeluv.x, pixeluv.y));\n"
+      "sum += sample(uv + vec2(pixeluv.x, pixeluv.y));\n"
       "gl_FragColor = sum / 8.0;\n"
-      /* "gl_FragColor = texture2D(tex_scr, uv);\n" */
-      /* "gl_FragColor = vec4(0.7, 0.0, 0.0, 1.0);\n" */
+      "}\n";
+
+    static const char *FRAG_SHADER_BLUR_UPSCALE =
+      "#version 110\n"
+      "uniform vec2 pixeluv;\n"
+      "uniform vec2 extent;\n"
+      "uniform float factor_center;\n"
+      "uniform sampler2D tex_scr;\n"
+      "\n"
+      "vec4 sample(vec2 uv) {\n"
+      "return texture2D(tex_scr, clamp(uv, vec2(0.0), extent));\n"
+      "}\n"
+      "\n"
+      "void main() {\n"
+      "vec2 uv = gl_TexCoord[0].xy;\n"
+      "vec4 sum = sample(uv + vec2(-pixeluv.x * 2.0, 0.0));\n"
+      "sum += sample(uv + vec2(-pixeluv.x, pixeluv.y)) * 2.0;\n"
+      "sum += sample(uv + vec2(0.0, pixeluv.y * 2.0));\n"
+      "sum += sample(uv + vec2(pixeluv.x, pixeluv.y)) * 2.0;\n"
+      "sum += sample(uv + vec2(pixeluv.x * 2.0, 0.0));\n"
+      "sum += sample(uv + vec2(pixeluv.x, -pixeluv.y)) * 2.0;\n"
+      "sum += sample(uv + vec2(0.0, -pixeluv.y * 2.0));\n"
+      "sum += sample(uv + vec2(-pixeluv.x, -pixeluv.y)) * 2.0;\n"
+      "gl_FragColor = sum / 12.0;\n"
       "}\n";
 
     const bool use_texture_rect = !ps->psglx->has_texture_non_power_of_two;
@@ -426,36 +454,33 @@ glx_init_blur(session_t *ps) {
 
       // Build shader
       {
-        int len = strlen(FRAG_SHADER_BLUR_PREFIX) + 1;
-        char *shader_str = calloc(len, sizeof(char));
-        if (!shader_str) {
-          printf_errf("(): Failed to allocate %d bytes for shader string.", len);
-          return false;
-        }
-        {
-          char *pc = shader_str;
-          sprintf(pc, FRAG_SHADER_BLUR_PREFIX);
-          pc += strlen(pc);
-          assert(strlen(shader_str) < len);
-        }
-        ppass->frag_shader = glx_create_shader(GL_FRAGMENT_SHADER, shader_str);
+        ppass->frag_shader = glx_create_shader(GL_FRAGMENT_SHADER, FRAG_SHADER_BLUR_PREFIX);
+        ppass->upscale_shader = glx_create_shader(GL_FRAGMENT_SHADER, FRAG_SHADER_BLUR_UPSCALE);
 
         {
             FILE* fd = fopen("shader.glsl", "w");
-            fprintf(fd, "%s\n", shader_str);
+            fprintf(fd, "%s\n", FRAG_SHADER_BLUR_PREFIX);
             fflush(fd);
         }
-        free(shader_str);
       }
 
       if (!ppass->frag_shader) {
         printf_errf("(): Failed to create fragment shader %d.", i);
         return false;
       }
+      if (!ppass->upscale_shader) {
+        printf_errf("(): Failed to create upscale shader %d.", i);
+        return false;
+      }
 
       // Build program
       ppass->prog = glx_create_program(&ppass->frag_shader, 1);
       if (!ppass->prog) {
+        printf_errf("(): Failed to create GLSL program.");
+        return false;
+      }
+      ppass->upscale_prog = glx_create_program(&ppass->upscale_shader, 1);
+      if (!ppass->upscale_prog) {
         printf_errf("(): Failed to create GLSL program.");
         return false;
       }
@@ -471,6 +496,7 @@ glx_init_blur(session_t *ps) {
       P_GET_UNIFM_LOC("factor_center", unifm_factor_center);
       if (!ps->o.glx_use_gpushader4) {
         P_GET_UNIFM_LOC("pixeluv", unifm_pixeluv);
+        P_GET_UNIFM_LOC("extent", unifm_extent);
         P_GET_UNIFM_LOC("tex_scr", unifm_tex);
       }
 
@@ -1182,8 +1208,13 @@ glx_blur_dst(session_t *ps, int dx, int dy, int width, int height, float z,
     const glx_blur_pass_t *ppass = &ps->psglx->blur_passes[0];
     // Use the shader
     glUseProgram(ppass->prog);
+
+    int level = 3;
+
     // Downscale
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < level; i++) {
+        int subwidth = width / pow(2, i);
+        int subheight = height / pow(2, i);
         //Bind the main texture
         assert(tex_scr);
 
@@ -1215,16 +1246,19 @@ glx_blur_dst(session_t *ps, int dx, int dy, int width, int height, float z,
 
         // Do the render
         {
-            glBegin(GL_QUADS);
-
             const GLfloat rx = 0;
             const GLfloat ry = 0;
-            const GLfloat rxe = 1;
-            const GLfloat rye = 1;
+            const GLfloat rxe = texfac_x * subwidth;
+            const GLfloat rye = texfac_y * subheight;
             GLfloat rdx = 0;
             GLfloat rdy = 0;
-            GLfloat rdxe = mwidth;
-            GLfloat rdye = mheight;
+            GLfloat rdxe = subwidth / 2;
+            GLfloat rdye = subheight / 2;
+
+            if (ppass->unifm_extent >= 0)
+                glUniform2f(ppass->unifm_extent, rxe, rye);
+
+            glBegin(GL_QUADS);
 
 #ifdef DEBUG_GLX
             printf_dbgf("(): %f, %f, %f, %f -> %f, %f, %f, %f\n", rx, ry, rxe,
@@ -1256,6 +1290,91 @@ glx_blur_dst(session_t *ps, int dx, int dy, int width, int height, float z,
     }
 
     // Disable the shader
+    glUseProgram(ppass->upscale_prog);
+
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, tex_scr);
+
+    // Upscale
+    for (int i = level-1; i >= 0; i--) {
+        int subwidth = width / pow(2, i);
+        int subheight = height / pow(2, i);
+        //Bind the main texture
+        assert(tex_scr);
+
+        // Set up to draw to the secondary texture
+        static const GLenum DRAWBUFS[2] = { GL_COLOR_ATTACHMENT0 };
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_2D, tex_scr2, 0);
+        glDrawBuffers(1, DRAWBUFS);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) !=
+                GL_FRAMEBUFFER_COMPLETE) {
+            printf_errf("(): Framebuffer attachment failed.");
+            goto glx_blur_dst_end;
+        }
+
+        // @CLEANUP Do we place this here or after the swap?
+        glBindTexture(GL_TEXTURE_2D, tex_scr);
+
+        // Set the blend function, since we don't want any blending
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+        // Set the shader parameters
+        if (ppass->unifm_pixeluv >= 0)
+            glUniform2f(ppass->unifm_pixeluv, texfac_x, texfac_y);
+        if (ppass->unifm_factor_center >= 0)
+            glUniform1f(ppass->unifm_factor_center, factor_center);
+        // Set the source texture
+        glUniform1i(ppass->unifm_tex, 0);
+
+        // Do the render
+        {
+            const GLfloat rx = 0;
+            const GLfloat ry = 0;
+            const GLfloat rxe = texfac_x * subwidth;
+            const GLfloat rye = texfac_y * subheight;
+            GLfloat rdx = 0;
+            GLfloat rdy = 0;
+            GLfloat rdxe = subwidth * 2;
+            GLfloat rdye = subheight * 2;
+
+            if (ppass->unifm_extent >= 0)
+                glUniform2f(ppass->unifm_extent, rxe, rye);
+
+            glBegin(GL_QUADS);
+
+
+#ifdef DEBUG_GLX
+            printf_dbgf("(): %f, %f, %f, %f -> %f, %f, %f, %f\n", rx, ry, rxe,
+                    rye, rdx, rdy, rdxe, rdye);
+#endif
+
+            glTexCoord2f(rx, rye);
+            glVertex3f(rdx, rdye, z);
+
+            glTexCoord2f(rxe, rye);
+            glVertex3f(rdxe, rdye, z);
+
+            glTexCoord2f(rxe, ry);
+            glVertex3f(rdxe, rdy, z);
+
+            glTexCoord2f(rx, ry);
+            glVertex3f(rdx, rdy, z);
+
+
+            glEnd();
+        }
+
+        // Swap main and secondary
+        {
+            GLuint tmp = tex_scr2;
+            tex_scr2 = tex_scr;
+            tex_scr = tmp;
+        }
+    }
+
     glUseProgram(0);
 
     //Bind the main texture
