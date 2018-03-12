@@ -1,8 +1,11 @@
 This is a fork from the original Compton by chjj. This fork exists (for now) solely to provide compton with support for a different shadow color for the focused window. For this, three new options have been included:
-- shawod-focused-red
-- shawod-focused-green
-- shawod-focused-blue
+- shadow-focused-red
+- shadow-focused-green
+- shadow-focused-blue
 These options are used exactly as the original shadow-red/green/blue options, but only afffect the focused window shadow.
+
+
+Here is the original compton README:
 
 # Compton
 
