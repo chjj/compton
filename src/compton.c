@@ -45,9 +45,7 @@ const char * const VSYNC_STRS[NUM_VSYNC + 1] = {
 
 /// Names of backends.
 const char * const BACKEND_STRS[NUM_BKEND + 1] = {
-  "xrender",      // BKEND_XRENDER
   "glx",          // BKEND_GLX
-  "xr_glx_hybrid",// BKEND_XR_GLX_HYBRID
   NULL
 };
 
@@ -65,18 +63,14 @@ static int (* const (VSYNC_FUNCS_WAIT[NUM_VSYNC]))(session_t *ps) = {
 #ifdef CONFIG_VSYNC_DRM
   [VSYNC_DRM        ] = vsync_drm_wait,
 #endif
-#ifdef CONFIG_VSYNC_OPENGL
   [VSYNC_OPENGL     ] = vsync_opengl_wait,
   [VSYNC_OPENGL_OML ] = vsync_opengl_oml_wait,
-#endif
 };
 
 /// Function pointers to deinitialize VSync.
 static void (* const (VSYNC_FUNCS_DEINIT[NUM_VSYNC]))(session_t *ps) = {
-#ifdef CONFIG_VSYNC_OPENGL
   [VSYNC_OPENGL_SWC   ] = vsync_opengl_swc_deinit,
   [VSYNC_OPENGL_MSWC  ] = vsync_opengl_mswc_deinit,
-#endif
 };
 
 /// Names of root window properties that could point to a pixmap of
@@ -861,10 +855,8 @@ get_root_tile(session_t *ps) {
 
   ps->root_tile_fill = fill;
   ps->root_tile_paint.pixmap = pixmap;
-#ifdef CONFIG_VSYNC_OPENGL
   if (BKEND_GLX == ps->o.backend)
     return glx_bind_pixmap(ps, &ps->root_tile_paint.ptex, ps->root_tile_paint.pixmap, 0, 0, 0);
-#endif
 
   return true;
 }
@@ -1321,95 +1313,6 @@ win_paint_shadow(session_t *ps, win *w,
       w->shadow_paint.pict, w->shadow_paint.ptex, reg_paint, pcache_reg, NULL);
 }
 
-/**
- * Create an picture.
- */
-static inline Picture
-xr_build_picture(session_t *ps, int wid, int hei,
-    XRenderPictFormat *pictfmt) {
-  if (!pictfmt)
-    pictfmt = XRenderFindVisualFormat(ps->dpy, ps->vis);
-
-  int depth = pictfmt->depth;
-
-  Pixmap tmp_pixmap = XCreatePixmap(ps->dpy, ps->root, wid, hei, depth);
-  if (!tmp_pixmap)
-    return None;
-
-  Picture tmp_picture = XRenderCreatePicture(ps->dpy, tmp_pixmap,
-    pictfmt, 0, 0);
-  free_pixmap(ps, &tmp_pixmap);
-
-  return tmp_picture;
-}
-
-/**
- * @brief Blur an area on a buffer.
- *
- * @param ps current session
- * @param tgt_buffer a buffer as both source and destination
- * @param x x pos
- * @param y y pos
- * @param wid width
- * @param hei height
- * @param blur_kerns blur kernels, ending with a NULL, guaranteed to have at
- *                    least one kernel
- * @param reg_clip a clipping region to be applied on intermediate buffers
- *
- * @return true if successful, false otherwise
- */
-static bool
-xr_blur_dst(session_t *ps, Picture tgt_buffer,
-    int x, int y, int wid, int hei, XFixed **blur_kerns,
-    XserverRegion reg_clip) {
-  assert(blur_kerns[0]);
-
-  // Directly copying from tgt_buffer to it does not work, so we create a
-  // Picture in the middle.
-  Picture tmp_picture = xr_build_picture(ps, wid, hei, NULL);
-
-  if (!tmp_picture) {
-    printf_errf("(): Failed to build intermediate Picture.");
-    return false;
-  }
-
-  if (reg_clip && tmp_picture)
-    XFixesSetPictureClipRegion(ps->dpy, tmp_picture, reg_clip, 0, 0);
-
-  Picture src_pict = tgt_buffer, dst_pict = tmp_picture;
-  for (int i = 0; blur_kerns[i]; ++i) {
-    assert(i < MAX_BLUR_PASS - 1);
-    XFixed *convolution_blur = blur_kerns[i];
-    int kwid = XFixedToDouble(convolution_blur[0]),
-        khei = XFixedToDouble(convolution_blur[1]);
-    bool rd_from_tgt = (tgt_buffer == src_pict);
-
-    // Copy from source picture to destination. The filter must
-    // be applied on source picture, to get the nearby pixels outside the
-    // window.
-    XRenderSetPictureFilter(ps->dpy, src_pict, XRFILTER_CONVOLUTION,
-        convolution_blur, kwid * khei + 2);
-    XRenderComposite(ps->dpy, PictOpSrc, src_pict, None, dst_pict,
-        (rd_from_tgt ? x: 0), (rd_from_tgt ? y: 0), 0, 0,
-        (rd_from_tgt ? 0: x), (rd_from_tgt ? 0: y), wid, hei);
-    xrfilter_reset(ps, src_pict);
-
-    {
-      XserverRegion tmp = src_pict;
-      src_pict = dst_pict;
-      dst_pict = tmp;
-    }
-  }
-
-  if (src_pict != tgt_buffer)
-    XRenderComposite(ps->dpy, PictOpSrc, src_pict, None, tgt_buffer,
-        0, 0, 0, 0, x, y, wid, hei);
-
-  free_picture(ps, &tmp_picture);
-
-  return true;
-}
-
 /*
  * WORK-IN-PROGRESS!
 static void
@@ -1443,105 +1346,21 @@ win_blur_background(session_t *ps, win *w, Picture tgt_buffer,
     factor_center = pct * 8.0 / (1.1 - pct);
   }
 
-  switch (ps->o.backend) {
-    case BKEND_XRENDER:
-    case BKEND_XR_GLX_HYBRID:
-      {
-        // Normalize blur kernels
-        for (int i = 0; i < MAX_BLUR_PASS; ++i) {
-          XFixed *kern_src = ps->o.blur_kerns[i];
-          XFixed *kern_dst = ps->blur_kerns_cache[i];
-          assert(i < MAX_BLUR_PASS);
-          if (!kern_src) {
-            assert(!kern_dst);
-            break;
-          }
-
-          assert(!kern_dst
-              || (kern_src[0] == kern_dst[0] && kern_src[1] == kern_dst[1]));
-
-          // Skip for fixed factor_center if the cache exists already
-          if (ps->o.blur_background_fixed && kern_dst) continue;
-
-          int kwid = XFixedToDouble(kern_src[0]),
-              khei = XFixedToDouble(kern_src[1]);
-
-          // Allocate cache space if needed
-          if (!kern_dst) {
-            kern_dst = malloc((kwid * khei + 2) * sizeof(XFixed));
-            if (!kern_dst) {
-              printf_errf("(): Failed to allocate memory for blur kernel.");
-              return;
-            }
-            ps->blur_kerns_cache[i] = kern_dst;
-          }
-
-          // Modify the factor of the center pixel
-          kern_src[2 + (khei / 2) * kwid + kwid / 2] =
-            XDoubleToFixed(factor_center);
-
-          // Copy over
-          memcpy(kern_dst, kern_src, (kwid * khei + 2) * sizeof(XFixed));
-          normalize_conv_kern(kwid, khei, kern_dst + 2);
-        }
-
-        // Minimize the region we try to blur, if the window itself is not
-        // opaque, only the frame is.
-        XserverRegion reg_noframe = None;
-        if (win_is_solid(ps, w)) {
-          XserverRegion reg_all = border_size(ps, w, false);
-          reg_noframe = win_get_region_noframe(ps, w, false);
-          XFixesSubtractRegion(ps->dpy, reg_noframe, reg_all, reg_noframe);
-          free_region(ps, &reg_all);
-        }
-        xr_blur_dst(ps, tgt_buffer, x, y, wid, hei, ps->blur_kerns_cache,
-            reg_noframe);
-        free_region(ps, &reg_noframe);
-      }
-      break;
-#ifdef CONFIG_VSYNC_OPENGL_GLSL
-    case BKEND_GLX:
-      // TODO: Handle frame opacity
-      glx_blur_dst(ps, x, y, wid, hei, ps->psglx->z - 0.5, factor_center,
+  // TODO: Handle frame opacity
+  glx_blur_dst(ps, x, y, wid, hei, ps->psglx->z - 0.5, factor_center,
           reg_paint, pcache_reg, &w->glx_blur_cache);
-      break;
-#endif
-    default:
-      assert(0);
-  }
 }
 
 static void
 render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
     double opacity, bool argb, bool neg,
     Picture pict, glx_texture_t *ptex,
-    XserverRegion reg_paint, const reg_data_t *pcache_reg
-#ifdef CONFIG_VSYNC_OPENGL_GLSL
-    , const glx_prog_main_t *pprogram
-#endif
+    XserverRegion reg_paint, const reg_data_t *pcache_reg,
+    const glx_prog_main_t *pprogram
     ) {
-  switch (ps->o.backend) {
-    case BKEND_XRENDER:
-    case BKEND_XR_GLX_HYBRID:
-      {
-        Picture alpha_pict = get_alpha_pict_d(ps, opacity);
-        if (alpha_pict != ps->alpha_picts[0]) {
-          int op = ((!argb && !alpha_pict) ? PictOpSrc: PictOpOver);
-          XRenderComposite(ps->dpy, op, pict, alpha_pict,
-              ps->tgt_buffer.pict, x, y, 0, 0, dx, dy, wid, hei);
-        }
-        break;
-      }
-#ifdef CONFIG_VSYNC_OPENGL
-    case BKEND_GLX:
-      glx_render(ps, ptex, x, y, dx, dy, wid, hei,
-          ps->psglx->z, opacity, argb, neg, reg_paint, pcache_reg, pprogram);
-      ps->psglx->z += 1;
-      break;
-#endif
-    default:
-      assert(0);
-  }
+    glx_render(ps, ptex, x, y, dx, dy, wid, hei,
+            ps->psglx->z, opacity, argb, neg, reg_paint, pcache_reg, pprogram);
+    ps->psglx->z += 1;
 }
 
 /**
@@ -1563,18 +1382,6 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   Drawable draw = w->paint.pixmap;
   if (!draw)
     draw = w->id;
-
-  // XRender: Build picture
-  if (bkend_use_xrender(ps) && !w->paint.pict) {
-    {
-      XRenderPictureAttributes pa = {
-        .subwindow_mode = IncludeInferiors,
-      };
-
-      w->paint.pict = XRenderCreatePicture(ps->dpy, draw, w->pictfmt,
-          CPSubwindowMode, &pa);
-    }
-  }
 
   if (IsViewable == w->a.map_state)
     xr_sync(ps, draw, &w->fence);
@@ -1600,31 +1407,6 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   const int hei = w->heightb;
 
   Picture pict = w->paint.pict;
-
-  // Invert window color, if required
-  if (bkend_use_xrender(ps) && w->invert_color) {
-    Picture newpict = xr_build_picture(ps, wid, hei, w->pictfmt);
-    if (newpict) {
-      // Apply clipping region to save some CPU
-      if (reg_paint) {
-        XserverRegion reg = copy_region(ps, reg_paint);
-        XFixesTranslateRegion(ps->dpy, reg, -x, -y);
-        XFixesSetPictureClipRegion(ps->dpy, newpict, 0, 0, reg);
-        free_region(ps, &reg);
-      }
-
-      XRenderComposite(ps->dpy, PictOpSrc, pict, None,
-          newpict, 0, 0, 0, 0, 0, 0, wid, hei);
-      XRenderComposite(ps->dpy, PictOpDifference, ps->white_picture, None,
-          newpict, 0, 0, 0, 0, 0, 0, wid, hei);
-      // We use an extra PictOpInReverse operation to get correct pixel
-      // alpha. There could be a better solution.
-      if (WMODE_ARGB == w->mode)
-        XRenderComposite(ps->dpy, PictOpInReverse, pict, None,
-            newpict, 0, 0, 0, 0, 0, 0, wid, hei);
-      pict = newpict;
-    }
-  }
 
   const double dopacity = get_opacity_percent(w);
 
@@ -1694,35 +1476,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
     if (!ps->o.inactive_dim_fixed)
       dim_opacity *= get_opacity_percent(w);
 
-    switch (ps->o.backend) {
-      case BKEND_XRENDER:
-      case BKEND_XR_GLX_HYBRID:
-        {
-          unsigned short cval = 0xffff * dim_opacity;
-
-          // Premultiply color
-          XRenderColor color = {
-            .red = 0, .green = 0, .blue = 0, .alpha = cval,
-          };
-
-          XRectangle rect = {
-            .x = x,
-            .y = y,
-            .width = wid,
-            .height = hei,
-          };
-
-          XRenderFillRectangles(ps->dpy, PictOpOver, ps->tgt_buffer.pict,
-              &color, &rect, 1);
-        }
-        break;
-#ifdef CONFIG_VSYNC_OPENGL
-      case BKEND_GLX:
-        glx_dim_dst(ps, x, y, wid, hei, ps->psglx->z - 0.7, dim_opacity,
+    glx_dim_dst(ps, x, y, wid, hei, ps->psglx->z - 0.7, dim_opacity,
             reg_paint, pcache_reg);
-        break;
-#endif
-    }
   }
 
   glx_mark(ps, w->id, false);
@@ -1758,11 +1513,7 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
 #endif
   XserverRegion reg_paint = None, reg_tmp = None, reg_tmp2 = None;
 
-#ifdef CONFIG_VSYNC_OPENGL
-  if (bkend_use_glx(ps)) {
-    glx_paint_pre(ps, &region);
-  }
-#endif
+  glx_paint_pre(ps, &region);
 
   if (!region) {
     region_real = region = get_screen_region(ps);
@@ -1778,46 +1529,26 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
   ps->tgt_buffer.pict = ps->tgt_picture;
 #else
   if (!paint_isvalid(ps, &ps->tgt_buffer)) {
-    // DBE painting mode: Directly paint to a Picture of the back buffer
-    if (BKEND_XRENDER == ps->o.backend && ps->o.dbe) {
-      ps->tgt_buffer.pict = XRenderCreatePicture(ps->dpy, ps->root_dbe,
-          XRenderFindVisualFormat(ps->dpy, ps->vis),
-          0, 0);
-    }
     // No-DBE painting mode: Paint to an intermediate Picture then paint
     // the Picture to root window
-    else {
-      if (!ps->tgt_buffer.pixmap) {
-        free_paint(ps, &ps->tgt_buffer);
-        ps->tgt_buffer.pixmap = XCreatePixmap(ps->dpy, ps->root,
-            ps->root_width, ps->root_height, ps->depth);
-      }
+  if (!ps->tgt_buffer.pixmap) {
+    free_paint(ps, &ps->tgt_buffer);
+    ps->tgt_buffer.pixmap = XCreatePixmap(ps->dpy, ps->root,
+        ps->root_width, ps->root_height, ps->depth);
+  }
 
-      if (BKEND_GLX != ps->o.backend)
-        ps->tgt_buffer.pict = XRenderCreatePicture(ps->dpy,
-            ps->tgt_buffer.pixmap, XRenderFindVisualFormat(ps->dpy, ps->vis),
-            0, 0);
-    }
+  if (BKEND_GLX != ps->o.backend)
+    ps->tgt_buffer.pict = XRenderCreatePicture(ps->dpy,
+        ps->tgt_buffer.pixmap, XRenderFindVisualFormat(ps->dpy, ps->vis),
+        0, 0);
   }
 #endif
 
-  if (BKEND_XRENDER == ps->o.backend)
-    XFixesSetPictureClipRegion(ps->dpy, ps->tgt_picture, 0, 0, region_real);
-
 #ifdef MONITOR_REPAINT
-  switch (ps->o.backend) {
-    case BKEND_XRENDER:
-      XRenderComposite(ps->dpy, PictOpSrc, ps->black_picture, None,
-          ps->tgt_picture, 0, 0, 0, 0, 0, 0,
-          ps->root_width, ps->root_height);
-      break;
-    case BKEND_GLX:
-    case BKEND_XR_GLX_HYBRID:
-      glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
-      glClear(GL_COLOR_BUFFER_BIT);
-      glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-      break;
-  }
+  glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  break;
 #endif
 
   if (t && t->reg_ignore) {
@@ -1956,15 +1687,13 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
     // Make sure all previous requests are processed to achieve best
     // effect
     XSync(ps->dpy, False);
-#ifdef CONFIG_VSYNC_OPENGL
     if (glx_has_context(ps)) {
-      if (ps->o.vsync_use_glfinish)
-        glFinish();
-      else
-        glFlush();
-      glXWaitX();
+        if (ps->o.vsync_use_glfinish)
+            glFinish();
+        else
+            glFlush();
+        glXWaitX();
     }
-#endif
   }
 
   // Wait for VBlank. We could do it aggressively (send the painting
@@ -1973,59 +1702,11 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
   if (!ps->o.vsync_aggressive)
     vsync_wait(ps);
 
-  switch (ps->o.backend) {
-    case BKEND_XRENDER:
-      // DBE painting mode, only need to swap the buffer
-      if (ps->o.dbe) {
-        XdbeSwapInfo swap_info = {
-          .swap_window = get_tgt_window(ps),
-          // Is it safe to use XdbeUndefined?
-          .swap_action = XdbeCopied
-        };
-        XdbeSwapBuffers(ps->dpy, &swap_info, 1);
-      }
-      // No-DBE painting mode
-      else if (ps->tgt_buffer.pict != ps->tgt_picture) {
-        XRenderComposite(
-          ps->dpy, PictOpSrc, ps->tgt_buffer.pict, None,
-          ps->tgt_picture, 0, 0, 0, 0,
-          0, 0, ps->root_width, ps->root_height);
-      }
-      break;
-#ifdef CONFIG_VSYNC_OPENGL
-    case BKEND_XR_GLX_HYBRID:
-      XSync(ps->dpy, False);
-      if (ps->o.vsync_use_glfinish)
-        glFinish();
-      else
-        glFlush();
-      glXWaitX();
-      assert(ps->tgt_buffer.pixmap);
-      xr_sync(ps, ps->tgt_buffer.pixmap, &ps->tgt_buffer_fence);
-      paint_bind_tex_real(ps, &ps->tgt_buffer,
-          ps->root_width, ps->root_height, ps->depth,
-          !ps->o.glx_no_rebind_pixmap);
-      // See #163
-      xr_sync(ps, ps->tgt_buffer.pixmap, &ps->tgt_buffer_fence);
-      if (ps->o.vsync_use_glfinish)
-        glFinish();
-      else
-        glFlush();
-      glXWaitX();
-      glx_render(ps, ps->tgt_buffer.ptex, 0, 0, 0, 0,
-          ps->root_width, ps->root_height, 0, 1.0, false, false,
-          region_real, NULL, NULL);
-      // No break here!
-    case BKEND_GLX:
-      if (ps->o.glx_use_copysubbuffermesa)
-        glx_swap_copysubbuffermesa(ps, region_real);
-      else
-        glXSwapBuffers(ps->dpy, get_tgt_window(ps));
-      break;
-#endif
-    default:
-      assert(0);
-  }
+  if (ps->o.glx_use_copysubbuffermesa)
+      glx_swap_copysubbuffermesa(ps, region_real);
+  else
+      glXSwapBuffers(ps->dpy, get_tgt_window(ps));
+
   glx_mark_frame(ps);
 
   if (ps->o.vsync_aggressive)
@@ -2033,12 +1714,10 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
 
   XFlush(ps->dpy);
 
-#ifdef CONFIG_VSYNC_OPENGL
   if (glx_has_context(ps)) {
-    glFlush();
-    glXWaitX();
+      glFlush();
+      glXWaitX();
   }
-#endif
 
   XFixesDestroyRegion(ps->dpy, region);
 
@@ -2665,29 +2344,6 @@ win_on_factor_change(session_t *ps, win *w) {
 }
 
 /**
- * Process needed window updates.
- */
-static void
-win_upd_run(session_t *ps, win *w, win_upd_t *pupd) {
-  if (pupd->shadow) {
-    win_determine_shadow(ps, w);
-    pupd->shadow = false;
-  }
-  if (pupd->fade) {
-    win_determine_fade(ps, w);
-    pupd->fade = false;
-  }
-  if (pupd->invert_color) {
-    win_determine_invert_color(ps, w);
-    pupd->invert_color = false;
-  }
-  if (pupd->focus) {
-    win_update_focused(ps, w);
-    pupd->focus = false;
-  }
-}
-
-/**
  * Update cache data in struct _win that depends on window size.
  */
 static void
@@ -3091,19 +2747,17 @@ configure_win(session_t *ps, XConfigureEvent *ce) {
       redir_start(ps);
     }
 
-#ifdef CONFIG_VSYNC_OPENGL
     // Reinitialize GLX on root change
     if (ps->o.glx_reinit_on_root_change && ps->psglx) {
-      if (!glx_reinit(ps, bkend_use_glx(ps)))
-        printf_errf("(): Failed to reinitialize GLX, troubles ahead.");
-      if (BKEND_GLX == ps->o.backend && !init_filters(ps))
-        printf_errf("(): Failed to initialize filters.");
+        if (!glx_reinit(ps, bkend_use_glx(ps)))
+            printf_errf("(): Failed to reinitialize GLX, troubles ahead.");
+        if (BKEND_GLX == ps->o.backend && !init_filters(ps))
+            printf_errf("(): Failed to initialize filters.");
     }
 
     // GLX root change callback
     if (BKEND_GLX == ps->o.backend)
-      glx_on_root_change(ps);
-#endif
+        glx_on_root_change(ps);
 
     force_repaint(ps);
 
@@ -3345,20 +2999,18 @@ xerror(Display __attribute__((unused)) *dpy, XErrorEvent *ev) {
     CASESTRRET2(BadGlyph);
   }
 
-#ifdef CONFIG_VSYNC_OPENGL
   if (ps->glx_exists) {
-    o = ev->error_code - ps->glx_error;
-    switch (o) {
-      CASESTRRET2(GLX_BAD_SCREEN);
-      CASESTRRET2(GLX_BAD_ATTRIBUTE);
-      CASESTRRET2(GLX_NO_EXTENSION);
-      CASESTRRET2(GLX_BAD_VISUAL);
-      CASESTRRET2(GLX_BAD_CONTEXT);
-      CASESTRRET2(GLX_BAD_VALUE);
-      CASESTRRET2(GLX_BAD_ENUM);
-    }
+      o = ev->error_code - ps->glx_error;
+      switch (o) {
+          CASESTRRET2(GLX_BAD_SCREEN);
+          CASESTRRET2(GLX_BAD_ATTRIBUTE);
+          CASESTRRET2(GLX_NO_EXTENSION);
+          CASESTRRET2(GLX_BAD_VISUAL);
+          CASESTRRET2(GLX_BAD_CONTEXT);
+          CASESTRRET2(GLX_BAD_VALUE);
+          CASESTRRET2(GLX_BAD_ENUM);
+      }
   }
-#endif
 
 #ifdef CONFIG_XSYNC
   if (ps->xsync_exists) {
@@ -3440,8 +3092,6 @@ wid_get_prop_window(session_t *ps, Window wid, Atom aprop) {
  */
 static void
 win_update_focused(session_t *ps, win *w) {
-  bool focused_old = w->focused;
-
   if (UNSET != w->focused_force) {
     w->focused = w->focused_force;
   }
@@ -4615,11 +4265,7 @@ usage(int ret) {
     "    drm = VSync with DRM_IOCTL_WAIT_VBLANK. May only work on some\n"
     "      (DRI-based) drivers." WARNING "\n"
 #undef WARNING
-#ifndef CONFIG_VSYNC_OPENGL
-#define WARNING WARNING_DISABLED
-#else
 #define WARNING
-#endif
     "    opengl = Try to VSync with SGI_video_sync OpenGL extension. Only\n"
     "      work on some drivers." WARNING"\n"
     "    opengl-oml = Try to VSync with OML_sync_control OpenGL extension.\n"
@@ -4750,11 +4396,7 @@ usage(int ret) {
     "  screen." WARNING "\n"
     "\n"
 #undef WARNING
-#ifndef CONFIG_VSYNC_OPENGL
-#define WARNING "(GLX BACKENDS DISABLED AT COMPILE TIME)"
-#else
 #define WARNING
-#endif
     "--backend backend\n"
     "  Choose backend. Possible choices are xrender, glx, and\n"
     "  xr_glx_hybrid" WARNING ".\n"
@@ -4934,13 +4576,11 @@ fork_after(session_t *ps) {
   if (getppid() == 1)
     return true;
 
-#ifdef CONFIG_VSYNC_OPENGL
   // GLX context must be released and reattached on fork
   if (glx_has_context(ps) && !glXMakeCurrent(ps->dpy, None, NULL)) {
-    printf_errf("(): Failed to detach GLx context.");
-    return false;
+      printf_errf("(): Failed to detach GLx context.");
+      return false;
   }
-#endif
 
   int pid = fork();
 
@@ -4953,13 +4593,11 @@ fork_after(session_t *ps) {
 
   setsid();
 
-#ifdef CONFIG_VSYNC_OPENGL
   if (glx_has_context(ps)
-      && !glXMakeCurrent(ps->dpy, get_tgt_window(ps), ps->psglx->context)) {
-    printf_errf("(): Failed to make GLX context current.");
-    return false;
+          && !glXMakeCurrent(ps->dpy, get_tgt_window(ps), ps->psglx->context)) {
+      printf_errf("(): Failed to make GLX context current.");
+      return false;
   }
-#endif
 
   // Mainly to suppress the _FORTIFY_SOURCE warning
   bool success = freopen("/dev/null", "r", stdin);
@@ -5009,180 +4647,6 @@ parse_long(const char *s, long *dest) {
     return false;
   }
   *dest = val;
-  return true;
-}
-
-/**
- * Parse a floating-point number in matrix.
- */
-static inline const char *
-parse_matrix_readnum(const char *src, double *dest) {
-  char *pc = NULL;
-  double val = strtod(src, &pc);
-  if (!pc || pc == src) {
-    printf_errf("(\"%s\"): No number found.", src);
-    return src;
-  }
-
-  while (*pc && (isspace(*pc) || ',' == *pc))
-    ++pc;
-
-  *dest = val;
-
-  return pc;
-}
-
-/**
- * Parse a matrix.
- */
-static inline XFixed *
-parse_matrix(session_t *ps, const char *src, const char **endptr) {
-  int wid = 0, hei = 0;
-  const char *pc = NULL;
-  XFixed *matrix = NULL;
-  
-  // Get matrix width and height
-  {
-    double val = 0.0;
-    if (src == (pc = parse_matrix_readnum(src, &val)))
-      goto parse_matrix_err;
-    src = pc;
-    wid = val;
-    if (src == (pc = parse_matrix_readnum(src, &val)))
-      goto parse_matrix_err;
-    src = pc;
-    hei = val;
-  }
-
-  // Validate matrix width and height
-  if (wid <= 0 || hei <= 0) {
-    printf_errf("(): Invalid matrix width/height.");
-    goto parse_matrix_err;
-  }
-  if (!(wid % 2 && hei % 2)) {
-    printf_errf("(): Width/height not odd.");
-    goto parse_matrix_err;
-  }
-  if (wid > 16 || hei > 16) {
-    printf_errf("(): Matrix width/height too large.");
-    goto parse_matrix_err;
-  }
-
-  // Allocate memory
-  matrix = calloc(wid * hei + 2, sizeof(XFixed));
-  if (!matrix) {
-    printf_errf("(): Failed to allocate memory for matrix.");
-    goto parse_matrix_err;
-  }
-
-  // Read elements
-  {
-    int skip = hei / 2 * wid + wid / 2;
-    bool hasneg = false;
-    for (int i = 0; i < wid * hei; ++i) {
-      // Ignore the center element
-      if (i == skip) {
-        matrix[2 + i] = XDoubleToFixed(0);
-        continue;
-      }
-      double val = 0;
-      if (src == (pc = parse_matrix_readnum(src, &val)))
-        goto parse_matrix_err;
-      src = pc;
-      if (val < 0) hasneg = true;
-      matrix[2 + i] = XDoubleToFixed(val);
-    }
-    if (BKEND_XRENDER == ps->o.backend && hasneg)
-      printf_errf("(): A convolution kernel with negative values "
-          "may not work properly under X Render backend.");
-  }
-
-  // Detect trailing characters
-  for ( ;*pc && ';' != *pc; ++pc)
-    if (!isspace(*pc) && ',' != *pc) {
-      printf_errf("(): Trailing characters in matrix string.");
-      goto parse_matrix_err;
-    }
-
-  // Jump over spaces after ';'
-  if (';' == *pc) {
-    ++pc;
-    while (*pc && isspace(*pc))
-      ++pc;
-  }
-
-  // Require an end of string if endptr is not provided, otherwise
-  // copy end pointer to endptr
-  if (endptr)
-    *endptr = pc;
-  else if (*pc) {
-    printf_errf("(): Only one matrix expected.");
-    goto parse_matrix_err;
-  }
-
-  // Fill in width and height
-  matrix[0] = XDoubleToFixed(wid);
-  matrix[1] = XDoubleToFixed(hei);
-
-  return matrix;
-
-parse_matrix_err:
-  free(matrix);
-  return NULL;
-}
-
-/**
- * Parse a convolution kernel.
- */
-static inline XFixed *
-parse_conv_kern(session_t *ps, const char *src, const char **endptr) {
-  return parse_matrix(ps, src, endptr);
-}
-
-/**
- * Parse a list of convolution kernels.
- */
-static bool
-parse_conv_kern_lst(session_t *ps, const char *src, XFixed **dest, int max) {
-  static const struct {
-    const char *name;
-    const char *kern_str;
-  } CONV_KERN_PREDEF[] = {
-    { "3x3box", "3,3,1,1,1,1,1,1,1,1," },
-    { "5x5box", "5,5,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1," },
-    { "7x7box", "7,7,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1," },
-    { "3x3gaussian", "3,3,0.243117,0.493069,0.243117,0.493069,0.493069,0.243117,0.493069,0.243117," },
-    { "5x5gaussian", "5,5,0.003493,0.029143,0.059106,0.029143,0.003493,0.029143,0.243117,0.493069,0.243117,0.029143,0.059106,0.493069,0.493069,0.059106,0.029143,0.243117,0.493069,0.243117,0.029143,0.003493,0.029143,0.059106,0.029143,0.003493," },
-    { "7x7gaussian", "7,7,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.001723,0.059106,0.493069,0.493069,0.059106,0.001723,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003," },
-    { "9x9gaussian", "9,9,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000012,0.001723,0.059106,0.493069,0.493069,0.059106,0.001723,0.000012,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000," },
-    { "11x11gaussian", "11,11,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000,0.000000,0.000000,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000000,0.000000,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000000,0.000000,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000000,0.000000,0.000012,0.001723,0.059106,0.493069,0.493069,0.059106,0.001723,0.000012,0.000000,0.000000,0.000006,0.000849,0.029143,0.243117,0.493069,0.243117,0.029143,0.000849,0.000006,0.000000,0.000000,0.000001,0.000102,0.003493,0.029143,0.059106,0.029143,0.003493,0.000102,0.000001,0.000000,0.000000,0.000000,0.000003,0.000102,0.000849,0.001723,0.000849,0.000102,0.000003,0.000000,0.000000,0.000000,0.000000,0.000000,0.000001,0.000006,0.000012,0.000006,0.000001,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000," },
-  };
-  for (int i = 0;
-      i < sizeof(CONV_KERN_PREDEF) / sizeof(CONV_KERN_PREDEF[0]); ++i)
-    if (!strcmp(CONV_KERN_PREDEF[i].name, src))
-      return parse_conv_kern_lst(ps, CONV_KERN_PREDEF[i].kern_str, dest, max);
-
-  int i = 0;
-  const char *pc = src;
-
-  // Free old kernels
-  for (i = 0; i < max; ++i) {
-    free(dest[i]);
-    dest[i] = NULL;
-  }
-
-  // Continue parsing until the end of source string
-  i = 0;
-  while (pc && *pc && i < max - 1) {
-    if (!(dest[i++] = parse_conv_kern(ps, pc, &pc)))
-      return false;
-  }
-
-  if (*pc) {
-    printf_errf("(): Too many blur kernels!");
-    return false;
-  }
-
   return true;
 }
 
@@ -5618,10 +5082,8 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --blur-background-fixed
   lcfg_lookup_bool(&cfg, "blur-background-fixed",
       &ps->o.blur_background_fixed);
-  // --blur-kern
-  if (config_lookup_string(&cfg, "blur-kern", &sval)
-      && !parse_conv_kern_lst(ps, sval, ps->o.blur_kerns, MAX_BLUR_PASS))
-    exit(1);
+  // --blur-level
+  lcfg_lookup_int(&cfg, "blur-level", &ps->o.blur_level);
   // --resize-damage
   lcfg_lookup_int(&cfg, "resize-damage", &ps->o.resize_damage);
   // --glx-no-stencil
@@ -5736,7 +5198,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "glx-no-rebind-pixmap", no_argument, NULL, 298 },
     { "glx-swap-method", required_argument, NULL, 299 },
     { "fade-exclude", required_argument, NULL, 300 },
-    { "blur-kern", required_argument, NULL, 301 },
+    { "blur-level", required_argument, NULL, 301 },
     { "resize-damage", required_argument, NULL, 302 },
     { "glx-use-gpushader4", no_argument, NULL, 303 },
     { "opacity-rule", required_argument, NULL, 304 },
@@ -5987,11 +5449,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
         // --fade-exclude
         condlst_add(ps, &ps->o.fade_blacklist, optarg);
         break;
-      case 301:
-        // --blur-kern
-        if (!parse_conv_kern_lst(ps, optarg, ps->o.blur_kerns, MAX_BLUR_PASS))
-          exit(1);
-        break;
+      P_CASELONG(301, blur_level);
       P_CASELONG(302, resize_damage);
       P_CASEBOOL(303, glx_use_gpushader4);
       case 304:
@@ -6307,7 +5765,6 @@ vsync_drm_wait(session_t *ps) {
  */
 static bool
 vsync_opengl_init(session_t *ps) {
-#ifdef CONFIG_VSYNC_OPENGL
   if (!ensure_glx_context(ps))
     return false;
 
@@ -6324,15 +5781,10 @@ vsync_opengl_init(session_t *ps) {
   }
 
   return true;
-#else
-  printf_errf("(): Program not compiled with OpenGL VSync support.");
-  return false;
-#endif
 }
 
 static bool
 vsync_opengl_oml_init(session_t *ps) {
-#ifdef CONFIG_VSYNC_OPENGL
   if (!ensure_glx_context(ps))
     return false;
 
@@ -6349,15 +5801,10 @@ vsync_opengl_oml_init(session_t *ps) {
   }
 
   return true;
-#else
-  printf_errf("(): Program not compiled with OpenGL VSync support.");
-  return false;
-#endif
 }
 
 static bool
 vsync_opengl_swc_init(session_t *ps) {
-#ifdef CONFIG_VSYNC_OPENGL
   if (!ensure_glx_context(ps))
     return false;
 
@@ -6377,15 +5824,10 @@ vsync_opengl_swc_init(session_t *ps) {
   ps->psglx->glXSwapIntervalProc(1);
 
   return true;
-#else
-  printf_errf("(): Program not compiled with OpenGL VSync support.");
-  return false;
-#endif
 }
 
 static bool
 vsync_opengl_mswc_init(session_t *ps) {
-#ifdef CONFIG_VSYNC_OPENGL
   if (!ensure_glx_context(ps))
     return false;
 
@@ -6405,13 +5847,8 @@ vsync_opengl_mswc_init(session_t *ps) {
   ps->psglx->glXSwapIntervalMESAProc(1);
 
   return true;
-#else
-  printf_errf("(): Program not compiled with OpenGL VSync support.");
-  return false;
-#endif
 }
 
-#ifdef CONFIG_VSYNC_OPENGL
 /**
  * Wait for next VSync, OpenGL method.
  */
@@ -6454,7 +5891,6 @@ vsync_opengl_mswc_deinit(session_t *ps) {
   if (glx_has_context(ps) && ps->psglx->glXSwapIntervalMESAProc)
     ps->psglx->glXSwapIntervalMESAProc(0);
 }
-#endif
 
 /**
  * Initialize current VSync method.
@@ -6570,36 +6006,8 @@ static bool
 init_filters(session_t *ps) {
   // Blur filter
   if (ps->o.blur_background || ps->o.blur_background_frame) {
-    switch (ps->o.backend) {
-      case BKEND_XRENDER:
-      case BKEND_XR_GLX_HYBRID:
-        {
-          // Query filters
-          XFilters *pf = XRenderQueryFilters(ps->dpy, get_tgt_window(ps));
-          if (pf) {
-            for (int i = 0; i < pf->nfilter; ++i) {
-              // Convolution filter
-              if (!strcmp(pf->filter[i], XRFILTER_CONVOLUTION))
-                ps->xrfilter_convolution_exists = true;
-            }
-          }
-          cxfree(pf);
-
-          // Turn features off if any required filter is not present
-          if (!ps->xrfilter_convolution_exists) {
-            printf_errf("(): X Render convolution filter unsupported by your X server. Background blur is not possible.");
-            return false;
-          }
-          break;
-        }
-#ifdef CONFIG_VSYNC_OPENGL
-      case BKEND_GLX:
-        {
-          if (!glx_init_blur(ps))
-            return false;
-        }
-#endif
-    }
+      if (!glx_init_blur(ps))
+          return false;
   }
 
   return true;
@@ -6968,18 +6376,17 @@ session_init(session_t *ps_old, int argc, char **argv) {
     .o = {
       .config_file = NULL,
       .display = NULL,
-      .backend = BKEND_XRENDER,
+      .backend = BKEND_GLX,
       .glx_no_stencil = false,
       .glx_copy_from_front = false,
-#ifdef CONFIG_VSYNC_OPENGL_GLSL
       .glx_prog_win = GLX_PROG_MAIN_INIT,
-#endif
       .mark_wmwin_focused = false,
       .mark_ovredir_focused = false,
       .fork_after_register = false,
       .synchronize = false,
       .detect_rounded_corners = false,
       .paint_on_overlay = false,
+      .blur_level = 0,
       .resize_damage = 0,
       .unredir_if_possible = false,
       .unredir_if_possible_blacklist = NULL,
@@ -7106,11 +6513,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
     .randr_exists = 0,
     .randr_event = 0,
     .randr_error = 0,
-#ifdef CONFIG_VSYNC_OPENGL
     .glx_exists = false,
     .glx_event = 0,
     .glx_error = 0,
-#endif
     .dbe_exists = false,
     .xrfilter_convolution_exists = false,
 
@@ -7310,34 +6715,19 @@ session_init(session_t *ps_old, int argc, char **argv) {
   if (ps->o.paint_on_overlay)
     init_overlay(ps);
 
-  // Initialize DBE
-  if (ps->o.dbe && BKEND_XRENDER != ps->o.backend) {
-    printf_errf("(): DBE couldn't be used on GLX backend.");
-    ps->o.dbe = false;
-  }
-
   if (ps->o.dbe && !init_dbe(ps))
     exit(1);
 
   // Initialize OpenGL as early as possible
   if (bkend_use_glx(ps)) {
-#ifdef CONFIG_VSYNC_OPENGL
     if (!glx_init(ps, true))
       exit(1);
-#else
-    printf_errfq(1, "(): GLX backend support not compiled in.");
-#endif
   }
 
   // Initialize window GL shader
   if (BKEND_GLX == ps->o.backend && ps->o.glx_fshader_win_str) {
-#ifdef CONFIG_VSYNC_OPENGL_GLSL
     if (!glx_load_prog_main(ps, NULL, ps->o.glx_fshader_win_str, &ps->o.glx_prog_win))
       exit(1);
-#else
-    printf_errf("(): GLSL supported not compiled in, can't load shader.");
-    exit(1);
-#endif
   }
 
   // Initialize software optimization
@@ -7597,9 +6987,7 @@ session_destroy(session_t *ps) {
   free(ps->o.glx_fshader_win_str);
   free_xinerama_info(ps);
 
-#ifdef CONFIG_VSYNC_OPENGL
   glx_destroy(ps);
-#endif
 
   // Free double buffer
   if (ps->root_dbe) {

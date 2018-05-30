@@ -18,6 +18,15 @@ OBJS = compton.o
 # === Configuration flags ===
 CFG = -std=c99
 
+# -lGL must precede some other libraries, or it segfaults on FreeBSD (#74)
+LIBS := -lGL $(LIBS)
+OBJS += opengl.o
+
+ifneq "$(GLX_DEBUG)" ""
+  CFG += -DDEBUG_GLX
+  # CFG += -DDEBUG_GLX_PAINTREG
+endif
+
 # ==== Xinerama ====
 # Enables support for --xinerama-shadow-crop
 ifeq "$(NO_XINERAMA)" ""
@@ -53,27 +62,6 @@ endif
 ifeq "$(NO_VSYNC_DRM)" ""
   INCS += $(shell pkg-config --cflags libdrm)
   CFG += -DCONFIG_VSYNC_DRM
-endif
-
-# ==== OpenGL ====
-# Enables support for GLX backend, OpenGL VSync methods, etc.
-ifeq "$(NO_VSYNC_OPENGL)" ""
-  CFG += -DCONFIG_VSYNC_OPENGL
-  # -lGL must precede some other libraries, or it segfaults on FreeBSD (#74)
-  LIBS := -lGL $(LIBS)
-  OBJS += opengl.o
-  # Enables support for GLSL (GLX background blur, etc.)
-  ifeq "$(NO_VSYNC_OPENGL_GLSL)" ""
-    CFG += -DCONFIG_VSYNC_OPENGL_GLSL
-  endif
-  # Enables support for GL FBO (GLX multi-pass blur, etc.)
-  ifeq "$(NO_VSYNC_OPENGL_FBO)" ""
-    CFG += -DCONFIG_VSYNC_OPENGL_FBO
-  endif
-  # Enables support for GL VBO (does nothing right now)
-  ifeq "$(NO_VSYNC_OPENGL_VBO)" ""
-    CFG += -DCONFIG_VSYNC_OPENGL_VBO
-  endif
 endif
 
 # ==== D-Bus ====
