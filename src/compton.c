@@ -43,6 +43,13 @@ const char * const VSYNC_STRS[NUM_VSYNC + 1] = {
   NULL
 };
 
+/// Names of blur_methods.
+const char * const BLUR_METHOD_STRS[NUM_BLRMTHD + 1] = {
+    "convolution",    // BLRMTHD_CONV
+    "kawase",         // BLRMTHD_KAWASE
+    NULL
+};
+
 /// Names of backends.
 const char * const BACKEND_STRS[NUM_BKEND + 1] = {
   "xrender",      // BKEND_XRENDER
@@ -4699,7 +4706,16 @@ usage(int ret) {
     "  Use fixed blur strength instead of adjusting according to window\n"
     "  opacity.\n"
     "\n"
+    "--blur-method algorithm\n"
+    "  Specify the algorithm for background blur. It is either one of:\n"
+    "    convolution (default), kawase\n"
+    "\n"
+    "--blur-strength level\n"
+    "  Only valid for '--blur-method kawase'!\n"
+    "  The strength of the kawase blur as an integer between 1 and 20. Defaults to 5.\n"
+    "\n"
     "--blur-kern matrix\n"
+    "  Only valid for '--blur-method convolution'!\n"
     "  Specify the blur convolution kernel, with the following format:\n"
     "    WIDTH,HEIGHT,ELE1,ELE2,ELE3,ELE4,ELE5...\n"
     "  The element in the center must not be included, it will be forever\n"
@@ -5618,6 +5634,14 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   // --blur-background-fixed
   lcfg_lookup_bool(&cfg, "blur-background-fixed",
       &ps->o.blur_background_fixed);
+  // --blur-method
+  if (config_lookup_string(&cfg, "blur-method", &sval)
+      && !parse_blur_method(ps, sval))
+    exit(1);
+  // --blur-strength
+  if (lcfg_lookup_int(&cfg, "blur-strength", &ival)
+      && !parse_blur_strength(ps, ival))
+    exit(1);
   // --blur-kern
   if (config_lookup_string(&cfg, "blur-kern", &sval)
       && !parse_conv_kern_lst(ps, sval, ps->o.blur_kerns, MAX_BLUR_PASS))
@@ -5756,6 +5780,8 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
+    { "blur-method", required_argument, NULL, 321 },
+    { "blur-strength", required_argument, NULL, 322 },
     { "reredir-on-root-change", no_argument, NULL, 731 },
     { "glx-reinit-on-root-change", no_argument, NULL, 732 },
     // Must terminate with a NULL entry
@@ -6027,6 +6053,16 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
         break;
       P_CASEBOOL(319, no_x_selection);
+      case 321:
+        // --blur-method
+        if (!parse_blur_method(ps, optarg))
+          exit(1);
+        break;
+      case 322:
+        // --blur-strength
+        if (!parse_blur_strength(ps, strtol(optarg, NULL, 0)))
+          exit(1);
+        break;
       P_CASEBOOL(731, reredir_on_root_change);
       P_CASEBOOL(732, glx_reinit_on_root_change);
       default:
@@ -6091,8 +6127,14 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     ps->o.track_leader = true;
   }
 
+  // Blur method kawase is not compatible with the xrender backend
+  if (ps->o.backend != BKEND_GLX && ps->o.blur_method == BLRMTHD_KAWASE) {
+      printf_errf("(): Blur method 'kawase' is incompatible with the XRender backend. Fall back to default.\n");
+      ps->o.blur_method = BLRMTHD_CONV;
+  }
+
   // Fill default blur kernel
-  if (ps->o.blur_background && !ps->o.blur_kerns[0]) {
+  if (ps->o.blur_background && (BLRMTHD_CONV == ps->o.blur_method) && !ps->o.blur_kerns[0]) {
     // Convolution filter parameter (box blur)
     // gaussian or binomial filters are definitely superior, yet looks
     // like they aren't supported as of xorg-server-1.13.0
@@ -7031,7 +7073,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .blur_background_frame = false,
       .blur_background_fixed = false,
       .blur_background_blacklist = NULL,
+      .blur_method = BLRMTHD_CONV,
       .blur_kerns = { NULL },
+      .blur_strength = { .iterations = 3, .offset = 2.75 },
       .inactive_dim = 0.0,
       .inactive_dim_fixed = false,
       .invert_color_list = NULL,

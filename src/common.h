@@ -229,7 +229,7 @@
 #define CGLX_MAX_BUFFER_AGE 5
 
 /// @brief Maximum passes for blur.
-#define MAX_BLUR_PASS 5
+#define MAX_BLUR_PASS 6
 
 // Window flags
 
@@ -352,6 +352,13 @@ typedef enum {
   NUM_VSYNC,
 } vsync_t;
 
+/// Possible background blur algorithms.
+enum blur_method {
+    BLRMTHD_CONV,
+    BLRMTHD_KAWASE,
+    NUM_BLRMTHD,
+};
+
 /// @brief Possible backends of compton.
 enum backend {
   BKEND_XRENDER,
@@ -467,19 +474,25 @@ typedef struct {
   GLuint frag_shader;
   /// GLSL program for blur.
   GLuint prog;
-  /// Location of uniform "offset_x" in blur GLSL program.
+  /// Location of uniform "offset_x" in conv-blur GLSL program.
   GLint unifm_offset_x;
-  /// Location of uniform "offset_y" in blur GLSL program.
+  /// Location of uniform "offset_y" in conv-blur GLSL program.
   GLint unifm_offset_y;
-  /// Location of uniform "factor_center" in blur GLSL program.
+  /// Location of uniform "factor_center" in conv-blur GLSL program.
   GLint unifm_factor_center;
+  /// Location of uniform "offset" in kawase-blur GLSL program.
+  GLint unifm_offset;
+  /// Location of uniform "halfpixel" in kawase-blur GLSL program.
+  GLint unifm_halfpixel;
+  /// Location of uniform "fulltex" in kawase-blur GLSL program.
+  GLint unifm_fulltex;
 } glx_blur_pass_t;
 
 typedef struct {
   /// Framebuffer used for blurring.
   GLuint fbo;
   /// Textures used for blurring.
-  GLuint textures[2];
+  GLuint textures[MAX_BLUR_PASS];
   /// Width of the textures.
   int width;
   /// Height of the textures.
@@ -537,6 +550,11 @@ typedef struct {
 struct _timeout_t;
 
 struct _win;
+
+typedef struct {
+  int iterations;
+  float offset;
+} blur_strength_t;
 
 typedef struct _c2_lptr c2_lptr_t;
 
@@ -707,8 +725,12 @@ typedef struct _options_t {
   bool blur_background_fixed;
   /// Background blur blacklist. A linked list of conditions.
   c2_lptr_t *blur_background_blacklist;
+  /// Blur method.
+  enum blur_method blur_method;
   /// Blur convolution kernel.
   XFixed *blur_kerns[MAX_BLUR_PASS];
+  /// Blur strength.
+  blur_strength_t blur_strength;
   /// How much to dim an inactive window. 0.0 - 1.0, 0 to disable.
   double inactive_dim;
   /// Whether to use fixed inactive dim opacity, instead of deciding
@@ -1263,6 +1285,7 @@ typedef enum {
 extern const char * const WINTYPES[NUM_WINTYPES];
 extern const char * const VSYNC_STRS[NUM_VSYNC + 1];
 extern const char * const BACKEND_STRS[NUM_BKEND + 1];
+extern const char * const BLUR_METHOD_STRS[NUM_BLRMTHD + 1];
 extern session_t *ps_g;
 
 // == Debugging code ==
@@ -1666,6 +1689,58 @@ parse_vsync(session_t *ps, const char *str) {
 
   printf_errf("(\"%s\"): Invalid vsync argument.", str);
   return false;
+}
+
+/**
+ * Parse a blur_method option argument.
+ */
+static inline bool
+parse_blur_method(session_t *ps, const char *str) {
+  for (enum blur_method i = 0; BLUR_METHOD_STRS[i]; ++i)
+    if (!strcasecmp(str, BLUR_METHOD_STRS[i])) {
+      ps->o.blur_method = i;
+      return true;
+    }
+
+  printf_errf("(\"%s\"): Invalid blur_method argument.", str);
+  return false;
+}
+
+/**
+ * Parse a blur_strength option argument.
+ */
+static inline bool
+parse_blur_strength(session_t *ps, const int level) {
+  static const blur_strength_t values[20] = {
+    { .iterations = 1, .offset = 1.5 },     // 1
+    { .iterations = 1, .offset = 2.0 },     // 2
+    { .iterations = 2, .offset = 2.5 },     // 3
+    { .iterations = 2, .offset = 3.0 },     // 4
+    { .iterations = 3, .offset = 2.75 },    // 5
+    { .iterations = 3, .offset = 3.5 },     // 6
+    { .iterations = 3, .offset = 4.25 },    // 7
+    { .iterations = 3, .offset = 5.0 },     // 8
+    { .iterations = 4, .offset = 3.71429 }, // 9
+    { .iterations = 4, .offset = 4.42857 }, // 10
+    { .iterations = 4, .offset = 5.14286 }, // 11
+    { .iterations = 4, .offset = 5.85714 }, // 12
+    { .iterations = 4, .offset = 6.57143 }, // 13
+    { .iterations = 4, .offset = 7.28571 }, // 14
+    { .iterations = 4, .offset = 8.0 },     // 15
+    { .iterations = 5, .offset = 6.0 },     // 16
+    { .iterations = 5, .offset = 7.0 },     // 17
+    { .iterations = 5, .offset = 8.0 },     // 18
+    { .iterations = 5, .offset = 9.0 },     // 19
+    { .iterations = 5, .offset = 10.0 },    // 20
+  };
+
+  if (level < 1 || level > 20) {
+    printf_errf("(\"%d\"): Invalid blur_strength argument. Needs to be a number between 1 and 20.", level);
+    return false;
+  }
+
+  ps->o.blur_strength = values[level - 1];
+  return true;
 }
 
 /**
@@ -2276,8 +2351,8 @@ free_glx_fbo(session_t *ps, GLuint *pfbo) {
  */
 static inline void
 free_glx_bc_resize(session_t *ps, glx_blur_cache_t *pbc) {
-  free_texture_r(ps, &pbc->textures[0]);
-  free_texture_r(ps, &pbc->textures[1]);
+  for (int i = 0; i < MAX_BLUR_PASS; i++)
+    free_texture_r(ps, &pbc->textures[i]);
   pbc->width = 0;
   pbc->height = 0;
 }
