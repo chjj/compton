@@ -359,6 +359,7 @@ make_shadow(session_t *ps, double opacity,
       d = sum_gaussian(ps->gaussian_map,
         opacity, center, center, width, height);
     }
+    if (ps->o.shadow_radius == 0) d = 255;
     memset(data, d, sheight * swidth);
   // }
 
@@ -6042,7 +6043,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
 
   // Range checking and option assignments
   ps->o.fade_delta = max_i(ps->o.fade_delta, 1);
-  ps->o.shadow_radius = max_i(ps->o.shadow_radius, 1);
+  ps->o.shadow_radius = max_i(ps->o.shadow_radius, 0);
   ps->o.shadow_red = normalize_d(ps->o.shadow_red);
   ps->o.shadow_green = normalize_d(ps->o.shadow_green);
   ps->o.shadow_blue = normalize_d(ps->o.shadow_blue);
