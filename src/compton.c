@@ -1650,8 +1650,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   /* const int hei = w->heightb; */
 
   // TODO: This will break if the user have window borders
-  const int wid = w->a.width;
-  const int hei = w->a.height;
+  const int wid = w->widthb;
+  const int hei = w->heightb;
 
   Picture pict = w->paint.pict;
 
@@ -5213,7 +5213,7 @@ parse_matrix(session_t *ps, const char *src, const char **endptr) {
   int wid = 0, hei = 0;
   const char *pc = NULL;
   XFixed *matrix = NULL;
-  
+
   // Get matrix width and height
   {
     double val = 0.0;
