@@ -568,6 +568,24 @@ typedef struct _options_t {
   bool glx_use_copysubbuffermesa;
   /// Whether to avoid rebinding pixmap on window damage.
   bool glx_no_rebind_pixmap;
+  /// Length of window transitions
+  int transition_length;
+  /// For smoothing on the x-coordinate of window animations
+  float transition_pow_x;
+  /// For smoothing on the y-coordinate of window animations
+  float transition_pow_y;
+  /// For smoothing on the width of window animations
+  float transition_pow_w;
+  /// For smoothing on the height of window animations
+  float transition_pow_h;
+  /// Wether to animate on window size change
+  bool size_transition;
+  /// Wether to scale new windows in from the center of the screen
+  bool spawn_center_screen;
+  /// Wether to scale new windows in from their center
+  bool spawn_center;
+  /// Does not animate downscaling
+  bool no_scale_down;
   /// GLX swap method we assume OpenGL uses.
   int glx_swap_method;
   /// Whether to use GL_EXT_gpu_shader4 to (hopefully) accelerates blurring.
@@ -1227,6 +1245,12 @@ typedef struct _win {
   bool blur_background;
   /// Background state on last paint.
   bool blur_background_last;
+
+  int oldX; int oldY; int oldW; int oldH;
+  int newX; int newY; int newW; int newH;
+  float moveTimeX; float moveTimeY;
+  float moveTimeW; float moveTimeH;
+  bool isOld;
 
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
   /// Textures and FBO background blur use.
