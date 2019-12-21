@@ -689,7 +689,7 @@ paint_preprocess(session_t *ps, win *list);
 
 static void
 render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
-    double opacity, bool argb, bool neg,
+    double opacity, bool argb, bool neg, margin_t *margin,
     Picture pict, glx_texture_t *ptex,
     XserverRegion reg_paint, const reg_data_t *pcache_reg
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
@@ -699,12 +699,12 @@ render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
 
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
 #define \
-   render(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, pict, ptex, reg_paint, pcache_reg, pprogram) \
-  render_(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, pict, ptex, reg_paint, pcache_reg, pprogram)
+   render(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, margin, pict, ptex, reg_paint, pcache_reg, pprogram) \
+  render_(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, margin, pict, ptex, reg_paint, pcache_reg, pprogram)
 #else
 #define \
-   render(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, pict, ptex, reg_paint, pcache_reg, pprogram) \
-  render_(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, pict, ptex, reg_paint, pcache_reg)
+   render(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, margin, pict, ptex, reg_paint, pcache_reg, pprogram) \
+  render_(ps, x, y, dx, dy, wid, hei, opacity, argb, neg, margin, pict, ptex, reg_paint, pcache_reg)
 #endif
 
 static inline void
@@ -717,6 +717,7 @@ win_render(session_t *ps, win *w, int x, int y, int wid, int hei,
   const bool neg = (w && w->invert_color);
 
   render(ps, x, y, dx, dy, wid, hei, opacity, argb, neg,
+      (w ? &w->frame_extents : NULL),
       pict, (w ? w->paint.ptex: ps->root_tile_paint.ptex),
       reg_paint, pcache_reg, (w ? &ps->o.glx_prog_win: NULL));
 }

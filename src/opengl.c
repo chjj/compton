@@ -290,6 +290,7 @@ glx_free_prog_main(session_t *ps, glx_prog_main_t *pprogram) {
   pprogram->unifm_opacity = -1;
   pprogram->unifm_invert_color = -1;
   pprogram->unifm_tex = -1;
+  pprogram->unifm_margin = -1;
 }
 
 #endif
@@ -558,6 +559,7 @@ glx_load_prog_main(session_t *ps,
   P_GET_UNIFM_LOC("opacity", unifm_opacity);
   P_GET_UNIFM_LOC("invert_color", unifm_invert_color);
   P_GET_UNIFM_LOC("tex", unifm_tex);
+  P_GET_UNIFM_LOC("margin", unifm_margin);
 #undef P_GET_UNIFM_LOC
 
   glx_check_err(ps);
@@ -1425,7 +1427,7 @@ glx_dim_dst(session_t *ps, int dx, int dy, int width, int height, float z,
 bool
 glx_render_(session_t *ps, const glx_texture_t *ptex,
     int x, int y, int dx, int dy, int width, int height, int z,
-    double opacity, bool argb, bool neg,
+    double opacity, bool argb, bool neg, margin_t *margin,
     XserverRegion reg_tgt, const reg_data_t *pcache_reg
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
     , const glx_prog_main_t *pprogram
@@ -1554,6 +1556,13 @@ glx_render_(session_t *ps, const glx_texture_t *ptex,
       glUniform1i(pprogram->unifm_invert_color, neg);
     if (pprogram->unifm_tex >= 0)
       glUniform1i(pprogram->unifm_tex, 0);
+    if (margin && pprogram->unifm_margin >= 0)
+      glUniform4f(pprogram->unifm_margin,
+              (float) margin->left   / ptex->width,
+              (float) margin->top    / ptex->height,
+        1.0 - (float) margin->right  / ptex->width,
+        1.0 - (float) margin->bottom / ptex->height
+      );
   }
 #endif
 

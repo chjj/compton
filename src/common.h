@@ -495,6 +495,8 @@ typedef struct {
   GLint unifm_invert_color;
   /// Location of uniform "tex" in window GLSL program.
   GLint unifm_tex;
+  /// Location of uniform "margin" in window GLSL program.
+  GLint unifm_margin;
 } glx_prog_main_t;
 
 #define GLX_PROG_MAIN_INIT { \
@@ -502,6 +504,7 @@ typedef struct {
   .unifm_opacity = -1, \
   .unifm_invert_color = -1, \
   .unifm_tex = -1, \
+  .unifm_margin = -1, \
 }
 
 #endif
@@ -2229,7 +2232,7 @@ glx_dim_dst(session_t *ps, int dx, int dy, int width, int height, float z,
 bool
 glx_render_(session_t *ps, const glx_texture_t *ptex,
     int x, int y, int dx, int dy, int width, int height, int z,
-    double opacity, bool argb, bool neg,
+    double opacity, bool argb, bool neg, margin_t *margin,
     XserverRegion reg_tgt, const reg_data_t *pcache_reg
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
     , const glx_prog_main_t *pprogram
@@ -2238,12 +2241,12 @@ glx_render_(session_t *ps, const glx_texture_t *ptex,
 
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
 #define \
-   glx_render(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, reg_tgt, pcache_reg, pprogram) \
-  glx_render_(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, reg_tgt, pcache_reg, pprogram)
+   glx_render(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, margin, reg_tgt, pcache_reg, pprogram) \
+  glx_render_(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, margin, reg_tgt, pcache_reg, pprogram)
 #else
 #define \
-   glx_render(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, reg_tgt, pcache_reg, pprogram) \
-  glx_render_(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, reg_tgt, pcache_reg)
+   glx_render(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, margin, reg_tgt, pcache_reg, pprogram) \
+  glx_render_(ps, ptex, x, y, dx, dy, width, height, z, opacity, argb, neg, margin, reg_tgt, pcache_reg)
 #endif
 
 void

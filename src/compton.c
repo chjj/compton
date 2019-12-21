@@ -1317,7 +1317,7 @@ win_paint_shadow(session_t *ps, win *w,
   }
 
   render(ps, 0, 0, w->a.x + w->shadow_dx, w->a.y + w->shadow_dy,
-      w->shadow_width, w->shadow_height, w->shadow_opacity, true, false,
+      w->shadow_width, w->shadow_height, w->shadow_opacity, true, false, &w->frame_extents,
       w->shadow_paint.pict, w->shadow_paint.ptex, reg_paint, pcache_reg, NULL);
 }
 
@@ -1513,7 +1513,7 @@ win_blur_background(session_t *ps, win *w, Picture tgt_buffer,
 
 static void
 render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
-    double opacity, bool argb, bool neg,
+    double opacity, bool argb, bool neg, margin_t *margin,
     Picture pict, glx_texture_t *ptex,
     XserverRegion reg_paint, const reg_data_t *pcache_reg
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
@@ -1534,8 +1534,8 @@ render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
       }
 #ifdef CONFIG_VSYNC_OPENGL
     case BKEND_GLX:
-      glx_render(ps, ptex, x, y, dx, dy, wid, hei,
-          ps->psglx->z, opacity, argb, neg, reg_paint, pcache_reg, pprogram);
+      glx_render(ps, ptex, x, y, dx, dy, wid, hei, ps->psglx->z, opacity,
+        argb, neg, margin, reg_paint, pcache_reg, pprogram);
       ps->psglx->z += 1;
       break;
 #endif
@@ -2020,7 +2020,7 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
         glFlush();
       glXWaitX();
       glx_render(ps, ps->tgt_buffer.ptex, 0, 0, 0, 0,
-          ps->root_width, ps->root_height, 0, 1.0, false, false,
+          ps->root_width, ps->root_height, 0, 1.0, false, false, NULL,
           region_real, NULL, NULL);
       // No break here!
     case BKEND_GLX:
@@ -5051,7 +5051,7 @@ parse_matrix(session_t *ps, const char *src, const char **endptr) {
   int wid = 0, hei = 0;
   const char *pc = NULL;
   XFixed *matrix = NULL;
-  
+
   // Get matrix width and height
   {
     double val = 0.0;
