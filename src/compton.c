@@ -1317,7 +1317,7 @@ win_paint_shadow(session_t *ps, win *w,
   }
 
   render(ps, 0, 0, w->a.x + w->shadow_dx, w->a.y + w->shadow_dy,
-      w->shadow_width, w->shadow_height, w->shadow_opacity, true, false,
+      w->shadow_width, w->shadow_height, w->shadow_opacity, true, false, &w->frame_extents,
       w->shadow_paint.pict, w->shadow_paint.ptex, reg_paint, pcache_reg, NULL);
 }
 
@@ -1513,7 +1513,7 @@ win_blur_background(session_t *ps, win *w, Picture tgt_buffer,
 
 static void
 render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
-    double opacity, bool argb, bool neg,
+    double opacity, bool argb, bool neg, margin_t *margin,
     Picture pict, glx_texture_t *ptex,
     XserverRegion reg_paint, const reg_data_t *pcache_reg
 #ifdef CONFIG_VSYNC_OPENGL_GLSL
@@ -1534,8 +1534,8 @@ render_(session_t *ps, int x, int y, int dx, int dy, int wid, int hei,
       }
 #ifdef CONFIG_VSYNC_OPENGL
     case BKEND_GLX:
-      glx_render(ps, ptex, x, y, dx, dy, wid, hei,
-          ps->psglx->z, opacity, argb, neg, reg_paint, pcache_reg, pprogram);
+      glx_render(ps, ptex, x, y, dx, dy, wid, hei, ps->psglx->z, opacity,
+        argb, neg, margin, reg_paint, pcache_reg, pprogram);
       ps->psglx->z += 1;
       break;
 #endif
@@ -1598,37 +1598,42 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
   const int y = w->a.y;
   const int wid = w->widthb;
   const int hei = w->heightb;
+  const bool invert_color = bkend_use_xrender(ps) && w->invert_color;
 
   Picture pict = w->paint.pict;
+  Picture invpict = NULL;
 
   // Invert window color, if required
-  if (bkend_use_xrender(ps) && w->invert_color) {
-    Picture newpict = xr_build_picture(ps, wid, hei, w->pictfmt);
-    if (newpict) {
+  if (invert_color) {
+    invpict = xr_build_picture(ps, wid, hei, w->pictfmt);
+    if (invpict) {
       // Apply clipping region to save some CPU
       if (reg_paint) {
         XserverRegion reg = copy_region(ps, reg_paint);
         XFixesTranslateRegion(ps->dpy, reg, -x, -y);
-        XFixesSetPictureClipRegion(ps->dpy, newpict, 0, 0, reg);
+        XFixesSetPictureClipRegion(ps->dpy, invpict, 0, 0, reg);
         free_region(ps, &reg);
       }
 
       XRenderComposite(ps->dpy, PictOpSrc, pict, None,
-          newpict, 0, 0, 0, 0, 0, 0, wid, hei);
+          invpict, 0, 0, 0, 0, 0, 0, wid, hei);
       XRenderComposite(ps->dpy, PictOpDifference, ps->white_picture, None,
-          newpict, 0, 0, 0, 0, 0, 0, wid, hei);
+          invpict, 0, 0, 0, 0, 0, 0, wid, hei);
+      // Restore hue after inverting colors
+      XRenderComposite(ps->dpy, PictOpHSLHue, pict, None,
+          invpict, 0, 0, 0, 0, 0, 0, wid, hei);
       // We use an extra PictOpInReverse operation to get correct pixel
       // alpha. There could be a better solution.
       if (WMODE_ARGB == w->mode)
         XRenderComposite(ps->dpy, PictOpInReverse, pict, None,
-            newpict, 0, 0, 0, 0, 0, 0, wid, hei);
-      pict = newpict;
+            invpict, 0, 0, 0, 0, 0, 0, wid, hei);
     }
   }
 
   const double dopacity = get_opacity_percent(w);
 
-  if (!w->frame_opacity) {
+  if (!w->frame_opacity && !invert_color) {
+    // If neither frame opacity nor inverted color is required
     win_render(ps, w, 0, 0, wid, hei, dopacity, reg_paint, pcache_reg, pict);
   }
   else {
@@ -1638,9 +1643,10 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
     const int l = extents.left;
     const int b = extents.bottom;
     const int r = extents.right;
+    const double frame_opacity = w->frame_opacity ? w->frame_opacity : 1.0;
 
 #define COMP_BDR(cx, cy, cwid, chei) \
-    win_render(ps, w, (cx), (cy), (cwid), (chei), w->frame_opacity, \
+    win_render(ps, w, (cx), (cy), (cwid), (chei), frame_opacity, \
         reg_paint, pcache_reg, pict)
 
     // The following complicated logic is required because some broken
@@ -1676,7 +1682,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
           pwid = wid - l - pwid;
           if (pwid > 0) {
             // body
-            win_render(ps, w, l, t, pwid, phei, dopacity, reg_paint, pcache_reg, pict);
+            win_render(ps, w, l, t, pwid, phei, dopacity, reg_paint, pcache_reg,
+              invpict ? invpict : pict);
           }
         }
       }
@@ -1685,8 +1692,8 @@ win_paint_win(session_t *ps, win *w, XserverRegion reg_paint,
 
 #undef COMP_BDR
 
-  if (pict != w->paint.pict)
-    free_picture(ps, &pict);
+  if (invpict)
+    free_picture(ps, &invpict);
 
   // Dimming the window if needed
   if (w->dim) {
@@ -2013,7 +2020,7 @@ paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t
         glFlush();
       glXWaitX();
       glx_render(ps, ps->tgt_buffer.ptex, 0, 0, 0, 0,
-          ps->root_width, ps->root_height, 0, 1.0, false, false,
+          ps->root_width, ps->root_height, 0, 1.0, false, false, NULL,
           region_real, NULL, NULL);
       // No break here!
     case BKEND_GLX:
@@ -2759,7 +2766,7 @@ win_mark_client(session_t *ps, win *w, Window client) {
   win_upd_wintype(ps, w);
 
   // Get frame widths. The window is in damaged area already.
-  if (ps->o.frame_opacity)
+  if (ps->o.frame_opacity || ps->o.invert_color_list)
     get_frame_extents(ps, w, client);
 
   // Get window group
@@ -4814,6 +4821,10 @@ usage(int ret) {
     "  GLX backend: Use specified GLSL fragment shader for rendering window\n"
     "  contents.\n"
     "\n"
+    "--glx-fshader-win-file path\n"
+    "  GLX backend: Load GLSL fragment shader from the given path and use it\n"
+    "  for rendering window contents.\n"
+    "\n"
     "--force-win-blend\n"
     "  Force all windows to be painted with blending. Useful if you have a\n"
     "  --glx-fshader-win that could turn opaque pixels transparent.\n"
@@ -5040,7 +5051,7 @@ parse_matrix(session_t *ps, const char *src, const char **endptr) {
   int wid = 0, hei = 0;
   const char *pc = NULL;
   XFixed *matrix = NULL;
-  
+
   // Get matrix width and height
   {
     double val = 0.0;
@@ -5638,6 +5649,17 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
     exit(1);
   // --glx-use-gpushader4
   lcfg_lookup_bool(&cfg, "glx-use-gpushader4", &ps->o.glx_use_gpushader4);
+  // --glx-fshader-win
+  if (config_lookup_string(&cfg, "glx-fshader-win", &sval))
+    ps->o.glx_fshader_win_str = mstrcpy(sval);
+  // --glx-fshader-win-file
+  if (config_lookup_string(&cfg, "glx-fshader-win-file", &sval)
+      && !(ps->o.glx_fshader_win_str = mfread(sval))) {
+    printf("Cannot read file %s\n", sval);
+    exit(1);
+  }
+  // --glx-reinit-on-root-change
+  lcfg_lookup_bool(&cfg, "glx-reinit-on-root-change", &ps->o.glx_reinit_on_root_change);
   // --xrender-sync
   lcfg_lookup_bool(&cfg, "xrender-sync", &ps->o.xrender_sync);
   // --xrender-sync-fence
@@ -5753,6 +5775,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "no-fading-destroyed-argb", no_argument, NULL, 315 },
     { "force-win-blend", no_argument, NULL, 316 },
     { "glx-fshader-win", required_argument, NULL, 317 },
+    { "glx-fshader-win-file", required_argument, NULL, 321 },
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
@@ -6025,6 +6048,12 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(316, force_win_blend);
       case 317:
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
+        break;
+      case 321:
+        if (!(ps->o.glx_fshader_win_str = mfread(optarg))) {
+          printf("Cannot read file %s\n", optarg);
+          exit(1);
+        }
         break;
       P_CASEBOOL(319, no_x_selection);
       P_CASEBOOL(731, reredir_on_root_change);

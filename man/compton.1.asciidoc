@@ -274,7 +274,10 @@ May also be one of the predefined kernels: `3x3box` (default), `5x5box`, `7x7box
 	Additionally use X Sync fence to sync clients' draw calls. Needed on nvidia-drivers with GLX backend for some users. May be disabled at compile time with `NO_XSYNC=1`.
 
 *--glx-fshader-win* 'SHADER'::
-	GLX backend: Use specified GLSL fragment shader for rendering window contents. See `compton-default-fshader-win.glsl` and `compton-fake-transparency-fshader-win.glsl` in the source tree for examples.
+	GLX backend: Use specified GLSL fragment shader, supplied as a string, for rendering window contents. See `compton-default-fshader-win.glsl` and `compton-fake-transparency-fshader-win.glsl` in the source tree for examples.
+
+*--glx-fshader-win-file* 'PATH'::
+	GLX backend: Load GLSL fragment shader from the given path and use it for rendering window contents. See `compton-default-fshader-win.glsl` and `compton-fake-transparency-fshader-win.glsl` in the source tree for examples.
 
 *--force-win-blend*::
 	Force all windows to be painted with blending. Useful if you have a *--glx-fshader-win* that could turn opaque pixels transparent.
