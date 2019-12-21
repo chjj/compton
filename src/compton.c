@@ -4821,6 +4821,10 @@ usage(int ret) {
     "  GLX backend: Use specified GLSL fragment shader for rendering window\n"
     "  contents.\n"
     "\n"
+    "--glx-fshader-win-file path\n"
+    "  GLX backend: Load GLSL fragment shader from the given path and use it\n"
+    "  for rendering window contents.\n"
+    "\n"
     "--force-win-blend\n"
     "  Force all windows to be painted with blending. Useful if you have a\n"
     "  --glx-fshader-win that could turn opaque pixels transparent.\n"
@@ -5645,6 +5649,17 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
     exit(1);
   // --glx-use-gpushader4
   lcfg_lookup_bool(&cfg, "glx-use-gpushader4", &ps->o.glx_use_gpushader4);
+  // --glx-fshader-win
+  if (config_lookup_string(&cfg, "glx-fshader-win", &sval))
+    ps->o.glx_fshader_win_str = mstrcpy(sval);
+  // --glx-fshader-win-file
+  if (config_lookup_string(&cfg, "glx-fshader-win-file", &sval)
+      && !(ps->o.glx_fshader_win_str = mfread(sval))) {
+    printf("Cannot read file %s\n", sval);
+    exit(1);
+  }
+  // --glx-reinit-on-root-change
+  lcfg_lookup_bool(&cfg, "glx-reinit-on-root-change", &ps->o.glx_reinit_on_root_change);
   // --xrender-sync
   lcfg_lookup_bool(&cfg, "xrender-sync", &ps->o.xrender_sync);
   // --xrender-sync-fence
@@ -5760,6 +5775,7 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "no-fading-destroyed-argb", no_argument, NULL, 315 },
     { "force-win-blend", no_argument, NULL, 316 },
     { "glx-fshader-win", required_argument, NULL, 317 },
+    { "glx-fshader-win-file", required_argument, NULL, 321 },
     { "version", no_argument, NULL, 318 },
     { "no-x-selection", no_argument, NULL, 319 },
     { "no-name-pixmap", no_argument, NULL, 320 },
@@ -6032,6 +6048,12 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
       P_CASEBOOL(316, force_win_blend);
       case 317:
         ps->o.glx_fshader_win_str = mstrcpy(optarg);
+        break;
+      case 321:
+        if (!(ps->o.glx_fshader_win_str = mfread(optarg))) {
+          printf("Cannot read file %s\n", optarg);
+          exit(1);
+        }
         break;
       P_CASEBOOL(319, no_x_selection);
       P_CASEBOOL(731, reredir_on_root_change);

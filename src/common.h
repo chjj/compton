@@ -1529,6 +1529,26 @@ mstrcpy(const char *src) {
 }
 
 /**
+ * Allocate the space and read a text file into a string.
+ */
+static inline char *
+mfread(const char *path) {
+  FILE *f = fopen(path, "r");
+  if (!f) return NULL;
+
+  fseek(f, 0, SEEK_END);
+  long fsize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  char *str = cmalloc(fsize + 1, char);
+  fread(str, 1, fsize, f);
+  fclose(f);
+  str[fsize] = 0;
+
+  return str;
+}
+
+/**
  * Allocate the space and copy a string.
  */
 static inline char *
