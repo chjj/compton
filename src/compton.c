@@ -4187,7 +4187,7 @@ ev_property_notify(session_t *ps, XPropertyEvent *ev) {
       }
     }
 
-    // Unconcerned about any other proprties on root window
+    // Unconcerned about any other properties on root window
     return;
   }
 
