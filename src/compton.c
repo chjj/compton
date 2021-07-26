@@ -452,6 +452,8 @@ win_build_shadow(session_t *ps, win *w, double opacity) {
   const int width = w->widthb;
   const int height = w->heightb;
 
+  Picture *shadow_to_apply;
+
   XImage *shadow_image = NULL;
   Pixmap shadow_pixmap = None, shadow_pixmap_argb = None;
   Picture shadow_picture = None, shadow_picture_argb = None;
@@ -482,7 +484,14 @@ win_build_shadow(session_t *ps, win *w, double opacity) {
 
   XPutImage(ps->dpy, shadow_pixmap, gc, shadow_image, 0, 0, 0, 0,
     shadow_image->width, shadow_image->height);
-  XRenderComposite(ps->dpy, PictOpSrc, ps->cshadow_picture, shadow_picture,
+
+    if (win_is_focused_real(ps, w)) {
+        shadow_to_apply  = &ps->cshadow_picture_focused;
+    } else {
+        shadow_to_apply  = &ps->cshadow_picture;
+    }
+
+  XRenderComposite(ps->dpy, PictOpSrc, *shadow_to_apply, shadow_picture,
       shadow_picture_argb, 0, 0, 0, 0, 0, 0,
       shadow_image->width, shadow_image->height);
 
@@ -1110,7 +1119,7 @@ paint_preprocess(session_t *ps, win *list) {
     // Data expiration
     {
       // Remove built shadow if needed
-      if (w->flags & WFLAG_SIZE_CHANGE)
+      if (w->flags & (WFLAG_SIZE_CHANGE | WFLAG_FOCUS_CHANGE))
         free_paint(ps, &w->shadow_paint);
 
       // Destroy reg_ignore on all windows if they should expire
@@ -1309,6 +1318,7 @@ static inline void
 win_paint_shadow(session_t *ps, win *w,
     XserverRegion reg_paint, const reg_data_t *pcache_reg) {
   // Bind shadow pixmap to GLX texture if needed
+
   paint_bind_tex(ps, &w->shadow_paint, 0, 0, 32, false);
 
   if (!paint_isvalid(ps, &w->shadow_paint)) {
@@ -1747,6 +1757,7 @@ rebuild_shadow_exclude_reg(session_t *ps) {
   XRectangle rect = geom_to_rect(ps, &ps->o.shadow_exclude_reg_geom, NULL);
   ps->shadow_exclude_reg = rect_to_reg(ps, &rect);
 }
+
 
 static void
 paint_all(session_t *ps, XserverRegion region, XserverRegion region_real, win *t) {
@@ -3469,6 +3480,7 @@ win_update_focused(session_t *ps, win *w) {
   // options depend on the output value of win_is_focused_real() instead of
   // w->focused
   w->flags |= WFLAG_OPCT_CHANGE;
+  w->flags |= WFLAG_FOCUS_CHANGE;
 }
 
 /**
@@ -5040,7 +5052,7 @@ parse_matrix(session_t *ps, const char *src, const char **endptr) {
   int wid = 0, hei = 0;
   const char *pc = NULL;
   XFixed *matrix = NULL;
-  
+
   // Get matrix width and height
   {
     double val = 0.0;
@@ -5538,6 +5550,14 @@ parse_config(session_t *ps, struct options_tmp *pcfgtmp) {
   config_lookup_float(&cfg, "shadow-green", &ps->o.shadow_green);
   // --shadow-blue
   config_lookup_float(&cfg, "shadow-blue", &ps->o.shadow_blue);
+
+  // --shadow-focused-red
+  config_lookup_float(&cfg, "shadow-focused-red", &ps->o.shadow_focused_red);
+  // --shadow-focused-green
+  config_lookup_float(&cfg, "shadow-focused-green", &ps->o.shadow_focused_green);
+  // --shadow-focused-blue
+  config_lookup_float(&cfg, "shadow-focused-blue", &ps->o.shadow_focused_blue);
+
   // --shadow-exclude-reg
   if (config_lookup_string(&cfg, "shadow-exclude-reg", &sval)
       && !parse_geometry(ps, sval, &ps->o.shadow_exclude_reg_geom))
@@ -5695,6 +5715,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
     { "shadow-red", required_argument, NULL, 257 },
     { "shadow-green", required_argument, NULL, 258 },
     { "shadow-blue", required_argument, NULL, 259 },
+    { "shadow-focused-red", required_argument, NULL, 800 },
+    { "shadow-focused-green", required_argument, NULL, 801 },
+    { "shadow-focused-blue", required_argument, NULL, 802 },
     { "inactive-opacity-override", no_argument, NULL, 260 },
     { "inactive-dim", required_argument, NULL, 261 },
     { "mark-wmwin-focused", no_argument, NULL, 262 },
@@ -5893,13 +5916,22 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
         // --shadow-red
         ps->o.shadow_red = atof(optarg);
         break;
+      case 800:
+        ps->o.shadow_focused_red = atof(optarg);
+        break;
       case 258:
         // --shadow-green
         ps->o.shadow_green = atof(optarg);
         break;
+      case 801:
+        ps->o.shadow_focused_green = atof(optarg);
+        break;
       case 259:
         // --shadow-blue
         ps->o.shadow_blue = atof(optarg);
+        break;
+      case 802:
+        ps->o.shadow_focused_blue = atof(optarg);
         break;
       P_CASEBOOL(260, inactive_opacity_override);
       case 261:
@@ -6046,6 +6078,9 @@ get_cfg(session_t *ps, int argc, char *const *argv, bool first_pass) {
   ps->o.shadow_red = normalize_d(ps->o.shadow_red);
   ps->o.shadow_green = normalize_d(ps->o.shadow_green);
   ps->o.shadow_blue = normalize_d(ps->o.shadow_blue);
+  ps->o.shadow_focused_red = normalize_d(ps->o.shadow_focused_red);
+  ps->o.shadow_focused_green = normalize_d(ps->o.shadow_focused_green);
+  ps->o.shadow_focused_blue = normalize_d(ps->o.shadow_focused_blue);
   ps->o.inactive_dim = normalize_d(ps->o.inactive_dim);
   ps->o.frame_opacity = normalize_d(ps->o.frame_opacity);
   ps->o.shadow_opacity = normalize_d(ps->o.shadow_opacity);
@@ -7001,6 +7036,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
       .shadow_red = 0.0,
       .shadow_green = 0.0,
       .shadow_blue = 0.0,
+      .shadow_focused_red = 0.0,
+      .shadow_focused_green = 0.0,
+      .shadow_focused_blue = 0.0,
       .shadow_radius = 12,
       .shadow_offset_x = -15,
       .shadow_offset_y = -15,
@@ -7398,6 +7436,9 @@ session_init(session_t *ps_old, int argc, char **argv) {
     ps->cshadow_picture = solid_picture(ps, true, 1,
         ps->o.shadow_red, ps->o.shadow_green, ps->o.shadow_blue);
   }
+
+  ps->cshadow_picture_focused = solid_picture(ps, true, 1,
+		  ps->o.shadow_focused_red, ps->o.shadow_focused_green, ps->o.shadow_focused_blue);
 
   fds_insert(ps, ConnectionNumber(ps->dpy), POLLIN);
   ps->tmout_unredir = timeout_insert(ps, ps->o.unredir_if_possible_delay,

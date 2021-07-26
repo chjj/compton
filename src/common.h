@@ -239,6 +239,7 @@
 #define WFLAG_POS_CHANGE    0x0002
 // Window opacity / dim state changed
 #define WFLAG_OPCT_CHANGE   0x0004
+#define WFLAG_FOCUS_CHANGE   0x0008
 
 // === Types ===
 
@@ -644,6 +645,7 @@ typedef struct _options_t {
   bool wintype_shadow[NUM_WINTYPES];
   /// Red, green and blue tone of the shadow.
   double shadow_red, shadow_green, shadow_blue;
+  double shadow_focused_red, shadow_focused_green, shadow_focused_blue;
   int shadow_radius;
   int shadow_offset_x, shadow_offset_y;
   double shadow_opacity;
@@ -921,6 +923,7 @@ typedef struct _session_t {
   Picture black_picture;
   /// 1x1 Picture of the shadow color.
   Picture cshadow_picture;
+  Picture cshadow_picture_focused;
   /// 1x1 white Picture.
   Picture white_picture;
   /// Gaussian map of shadow.
